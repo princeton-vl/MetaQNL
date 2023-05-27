@@ -1,0 +1,306 @@
+        - @enum TokenType begin
+        -     WORD
+        -     VARIABLE
+        -     SPECIAL_SYMBOL
+        - end
+        - 
+        - """
+        - Three types of tokens:
+        - * words
+        - * variables
+        - * special symbols
+        - """
+        - struct Token
+        -     idx::Int  # index in the vocabulary
+        -     type::TokenType
+        - end
+        - 
+        - "Alias of [`Token`](@ref)"
+        - const Variable = Token
+        - 
+        - "Alias of [`Token`](@ref)"
+        - const Word = Token
+        - 
+        - "Alias of [`Token`](@ref)"
+        - const SpecialSymbol = Token
+        - 
+        - """
+        -     is_word(t::Token)::Bool
+        - 
+        - Test if `t` is a word (``t \\in \\Sigma_w``).
+        - 
+        - # Example
+        - ```jldoctest
+        - julia> is_word(create_word("hello"))
+        - true
+        - 
+        - julia> is_word(create_variable("X"))
+        - false
+        - ```
+        - """
+        - function is_word(t::Token)
+        0     return t.type == WORD
+        - end
+        - 
+        - """
+        -     is_variable(t::Token)::Bool
+        - 
+        - Test if `t` is a variable (``t \\in \\Sigma_v``).
+        - 
+        - # Example
+        - ```jldoctest
+        - julia> is_variable(create_word("hello"))
+        - false
+        - 
+        - julia> is_variable(create_variable("X"))
+        - true
+        - ```
+        - """
+        - function is_variable(t::Token)
+        0     return t.type == VARIABLE
+        - end
+        - 
+        - """
+        -     is_special_symbol(t::Token)::Bool
+        - 
+        - Test if `t` is a special symbol (``t \\in \\Sigma_s``).
+        - 
+        - # Example
+        - ```jldoctest
+        - julia> is_special_symbol(create_special_symbol("TRUE"))
+        - true
+        - ```
+        - """
+        - function is_special_symbol(t::Token)
+        -     return t.type == SPECIAL_SYMBOL
+        - end
+        - 
+        - """
+        -     create_word(str::AbstractString)::Word
+        - 
+        - Create a word from `str`, which must be in [`word_vocab`](@ref).
+        - 
+        - # Example
+        - ```jldoctest
+        - julia> create_word("hello")
+        - hello
+        - ```
+        - """
+        - function create_word(str::AbstractString)
+        0     return Token(word_vocab[str], WORD)
+        - end
+        - 
+        - """
+        -     create_variable(str::AbstractString)::Variable
+        - 
+        - Create a variable from `str`, which must be in [`variable_vocab`](@ref).
+        - 
+        - # Example
+        - ```jldoctest
+        - julia> create_variable("X")
+        - [X]
+        - ```
+        - """
+        - function create_variable(name::AbstractString)
+        0     if startswith(name, '-')
+        0         return Token(parse(Int, name), VARIABLE)
+        -     else
+        0         return Token(variable_vocab[name], VARIABLE)
+        -     end
+        - end
+        - 
+        - function create_variable(idx::Integer)
+        0     return Token(idx, VARIABLE)
+        - end
+        - 
+        - """
+        -     create_special_symbol(str::AbstractString)::SpecialSymbol
+        - 
+        - Create a symbol from `str`, which must be in [`special_symbol_vocab`](@ref).
+        - 
+        - # Example
+        - ```jldoctest
+        - julia> create_special_symbol("TRUE")
+        - \$TRUE\$
+        - ```
+        - """
+        - function create_special_symbol(str::AbstractString)
+        0     return Token(special_symbol_vocab[str], SPECIAL_SYMBOL)
+        - end
+        - 
+        - function create_special_symbol(idx::Integer)
+        0     return Token(idx, SPECIAL_SYMBOL)
+        - end
+        - 
+        - """
+        -     create_token(str::AbstractString)::Token
+        - 
+        - Create a token from `str`. It can be a word, a variable, or a special symbol.
+        - 
+        - # Example
+        - ```jldoctest
+        - julia> create_token("hello")
+        - hello
+        - 
+        - julia> create_token("[X]")
+        - [X]
+        - 
+        - julia> create_token("\\\$TRUE\\\$")
+        - \$TRUE\$
+        - 
+        - julia> create_token("\\\$TRUE")
+        - ERROR: AssertionError
+        - ```
+        - """
+        - function create_token(str::AbstractString)::Token
+        0     if startswith(str, '[')
+        0         return @views create_variable(str[2:end-1])
+        0     elseif startswith(str, '$')
+        0         @assert endswith(str, '$')
+        0         return @views create_special_symbol(str[2:end-1])
+        -     else
+        0         return create_word(str)
+        -     end
+        - end
+        - 
+        - """
+        -     macro word_str(str::AbstractString)
+        - 
+        - Alias of [`create_word`](@ref).
+        - 
+        - # Example
+        - ```jldoctest
+        - julia> word"hello"
+        - hello
+        - ```
+        - """
+        - macro word_str(str::AbstractString)
+       64     return create_word(str)
+        - end
+        - 
+        - """
+        -     macro variable_str(str::AbstractString)
+        - 
+        - Alias of [`create_variable`](@ref).
+        - 
+        - # Example
+        - ```jldoctest
+        - julia> variable"X"
+        - [X]
+        - ```
+        - """
+        - macro variable_str(str::AbstractString)
+       96     return create_variable(str)
+        - end
+        - 
+        - """
+        -     macro symbol_str(str::AbstractString)
+        - 
+        - Alias of [`create_special_symbol`](@ref).
+        - 
+        - # Example
+        - ```jldoctest
+        - julia> symbol"TRUE"
+        - \$TRUE\$
+        - ```
+        - """
+        - macro symbol_str(str::AbstractString)
+      288     return create_special_symbol(str)
+        - end
+        - 
+        - function next_variable(var::Variable)
+        -     return create_variable(var.idx + 1)
+        - end
+        - 
+        - function first_variable()::Variable
+        -     return create_variable(1)
+        - end
+        - 
+        - """
+        -     get_name(var::Variable)::String
+        - 
+        - Return the the name of `var`.
+        - 
+        - # Example
+        - ```jldoctest
+        - julia> get_name(create_variable("X"))
+        - "X"
+        - ```
+        - """
+        - function get_name(var::Variable)::String
+        -     if var.idx >= 1
+        -         return variable_vocab[var.idx]
+        -     else
+        -         # Negative indexes are reserved for internal use only.
+        -         return string(var.idx)
+        -     end
+        - end
+        - 
+        - function get_symbol(sym::SpecialSymbol)::String
+        -     if sym.idx >= 1
+        -         return special_symbol_vocab[sym.idx]
+        -     else
+        -         # Negative indexes are reserved for internal use only.
+        -         return string(sym.idx)
+        -     end
+        - end
+        - 
+        - function Base.string(t::Token)
+        0     if is_word(t)
+        0         return word_vocab[t.idx]
+        0     elseif is_variable(t)
+       72         return "[$(get_name(t))]"
+        -     else
+      128         return "\$$(get_symbol(t))\$"
+        -     end
+        - end
+        - 
+        - function Base.show(io::IO, t::Token)
+        -     print(io, string(t))
+        - end
+        - 
+        - function Base.isless(t1::Token, t2::Token)
+        -     return t1.type < t2.type || (t1.type == t2.type && t1.idx < t2.idx)
+        - end
+        - 
+        - """
+        -     fresh_variable(existing_vars)
+        - 
+        - Return a fresh variable not in `existing_vars`.
+        - 
+        - # Example
+        - ```jldoctest
+        - julia> fresh_variable([variable"A", variable"B"])
+        - [C]
+        - ```
+        - """
+        - function fresh_variable(existing_vars)::Variable
+        0     num_vars = length(existing_vars)
+        0     vocab_size = length(variable_vocab)
+        - 
+        0     for idx in Iterators.countfrom(num_vars)
+        0         i = idx % vocab_size + 1
+        0         @assert !(i == num_vars + 1 && i < idx)
+        0         var = create_variable(variable_vocab[i])
+        0         if !(var in existing_vars)
+        0             return var
+        -         end
+        0     end
+        - end
+        - 
+        - export Token,
+        -     Word,
+        -     Variable,
+        -     SpecialSymbol,
+        -     is_word,
+        -     is_variable,
+        -     is_special_symbol,
+        -     create_word,
+        -     create_variable,
+        -     create_special_symbol,
+        -     create_token,
+        -     @word_str,
+        -     @variable_str,
+        -     @symbol_str,
+        -     get_name,
+        -     fresh_variable

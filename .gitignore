@@ -1,0 +1,8 @@
+/Manifest.toml
+data/
+runs/
+notebooks/.ipynb_checkpoints/
+docs/build/
+sbatch*.sh
+*.bin
+.DS_Store

@@ -1,0 +1,180 @@
+        - # Templates are used internally in unification/matching/anti-unification for pruning invalid solutions for computational efficiency.
+        - # They are not that important conceptually.
+        - 
+        - """
+        - A sentence template is obtained by replacing all segments of words/variables with special symbols of index -1.
+        - 
+        - # Fields
+        - `symbols::Vector{SpecialSymbol}`
+        - """
+        - struct SentenceTemplate
+   108594     symbols::Vector{SpecialSymbol}
+        - end
+        - 
+        - function Base.show(io::IO, tpl::SentenceTemplate)
+        -     len = length(tpl.symbols)
+        -     for (i, s) in enumerate(tpl.symbols)
+        -         print(io, s)
+        -         if i < len
+        -             print(io, ' ')
+        -         end
+        -     end
+        - end
+        - 
+        - """
+        -     SentenceTemplate(sent::AbstractSentence)
+        - 
+        - Create a sentence template from `sent`.
+        - 
+        - # Example
+        - ```jldoctest
+        - julia> SentenceTemplate(sent"hello world !")
+        - \$-1\$
+        - 
+        - julia> SentenceTemplate(sent"hello world ! \$MAPS_TO\$ hallo welt !")
+        - \$-1\$ \$MAPS_TO\$ \$-1\$
+        - ```
+        - """
+     1048 function SentenceTemplate(sent::AbstractSentence)
+     1048     symbols = SpecialSymbol[]
+     1064     for t in sent
+    33723         if is_special_symbol(t)
+     2884             push!(symbols, t)
+    60646         elseif isempty(symbols) || symbols[end].idx >= 1
+     3892             push!(symbols, create_special_symbol(-1))
+        -         end
+    34881     end
+     1048     return SentenceTemplate(symbols)
+        - end
+        - 
+   107546 function decompose(sent::Sentence)::Tuple{SentenceTemplate,Vector{Sentence}}
+   107546     symbols = SpecialSymbol[]
+   107546     segments = Sentence[]
+   107546     start_idx = 0
+        - 
+   215092     for (i, t) in enumerate(sent)
+  1290356         if is_special_symbol(t)
+   107546             push!(symbols, t)
+   107546             if start_idx > 0
+   107546                 push!(segments, sent[start_idx:i-1])
+   107546                 start_idx = 0
+        -             end
+        -         else
+  2258074             if isempty(symbols) || symbols[end].idx >= 1
+   215092                 push!(symbols, create_special_symbol(-1))
+   215092                 start_idx = i
+        -             end
+        -         end
+  2473166     end
+        - 
+   107546     if start_idx > 0
+   107546         push!(segments, sent[start_idx:end])
+        -     end
+        - 
+   107546     return SentenceTemplate(symbols), segments
+        - end
+        - 
+   107524 function decompose(
+        -     sents::AbstractVector{Sentence},
+        - )::Tuple{Vector{SentenceTemplate},Vector{Vector{Sentence}}}
+   107524     len = length(sents)
+   107524     all_tpls = Vector{SentenceTemplate}(undef, len)
+   107524     all_segments = Vector{Vector{Sentence}}(undef, len)
+        - 
+   215048     for (i, sent) in enumerate(sents)
+   107532         tpl, segments = decompose(sent)
+   107532         all_tpls[i] = tpl
+   107532         all_segments[i] = segments
+   107540     end
+        - 
+   107524     return all_tpls, all_segments
+        - end
+        - 
+   506481 function compose(
+        -     tpl::SentenceTemplate,
+        -     segments::AbstractVector{<:AbstractSentence},
+        - )::Sentence
+   506481     len = length(tpl.symbols) - length(segments)
+   506481     for seg in segments
+  1012962         len += length(seg)
+  1519443     end
+   506481     tokens = Vector{Token}(undef, len)
+        - 
+   506481     i = 1
+   506481     j = 1
+   506481     for s in tpl.symbols
+  1519443         if s.idx >= 1
+   506481             tokens[j] = s
+   506481             j += 1
+        -         else  # $-1$
+  1012962             for t in segments[i]
+  5072005                 tokens[j] = t
+  5072005                 j += 1
+  6084967             end
+  1012962             i += 1
+        -         end
+  2025924     end
+   506481     @assert i == length(segments) + 1
+        - 
+   506481     return Sentence(tokens)
+        - end
+        - 
+   452716 function compose(
+        -     all_tpls::AbstractVector{SentenceTemplate},
+        -     all_segments::AbstractVector{<:AbstractVector{<:AbstractSentence}},
+        - )::Vector{Sentence}
+   452716     @assert length(all_tpls) == length(all_segments)
+   452716     return [compose(tpl, segments) for (tpl, segments) in zip(all_tpls, all_segments)]
+        - end
+        - 
+    54297 function Base.:(==)(t1::SentenceTemplate, t2::SentenceTemplate)
+    54297     return t1.symbols == t2.symbols
+        - end
+        - 
+        - function Base.hash(tpl::SentenceTemplate, h::UInt)::UInt
+        -     h = xor(h, 0x0f38fbcad91f7f0d)  # h = hash(SentenceTemplate, h)
+        -     for s in tpl.symbols
+        -         h = hash(s, h)
+        -     end
+        -     return h
+        - end
+        - 
+        - function Base.isless(t1::SentenceTemplate, t2::SentenceTemplate)
+        -     return t1.symbols < t2.symbols
+        - end
+        - 
+        - struct RuleTemplate
+        -     premises::Vector{SentenceTemplate}
+        -     conclusion::SentenceTemplate
+        - 
+        -     function RuleTemplate(premises, conclusion)
+        -         sort!(premises)
+        -         return new(premises, conclusion)
+        -     end
+        - end
+        - 
+        - function RuleTemplate(rule::Rule)
+        -     premises = [SentenceTemplate(p) for p in rule.premises]
+        -     conclusion = SentenceTemplate(rule.conclusion)
+        -     return RuleTemplate(premises, conclusion)
+        - end
+        - 
+        - function Base.:(==)(t1::RuleTemplate, t2::RuleTemplate)
+        -     return t1.conclusion == t2.conclusion && t1.premises == t2.premises
+        - end
+        - 
+        - function Base.hash(t::RuleTemplate, h::UInt)::UInt
+        -     h = xor(h, 0xdc3ac64605dbe521)  # h = hash(RuleTemplate, h)
+        -     h = hash(t.conclusion, h)
+        -     for p in t.premises
+        -         h = hash(p, h)
+        -     end
+        -     return h
+        - end
+        - 
+        - function Base.isless(t1::RuleTemplate, t2::RuleTemplate)
+        -     return t1.conclusion < t2.conclusion ||
+        -            (t1.conclusion == t2.conclusion && t1.premises < t2.premises)
+        - end
+        - 
+        - export SentenceTemplate, RuleTemplate

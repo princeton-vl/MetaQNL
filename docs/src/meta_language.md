@@ -1,0 +1,5 @@
+# MetaLanguage
+
+```@autodocs
+Modules = [MetaLanguage]
+```

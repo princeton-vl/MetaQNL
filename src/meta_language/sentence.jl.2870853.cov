@@ -1,0 +1,954 @@
+        - "Abstract type for sentences."
+        - abstract type AbstractSentence end
+        - 
+        - """
+        - A sequence of tokens (``\\Sigma^{*}``).
+        - 
+        - # Fields
+        - * `tokens::Vector{Token}`
+        - """
+        - struct Sentence <: AbstractSentence
+  4975989     tokens::Vector{Token}
+        - end
+        - 
+        - """
+        -     Sentence()
+        - 
+        - Create an empty sentence.
+        - 
+        - # Example
+        - ```jldoctest
+        - julia> sent = Sentence()
+        - 
+        - 
+        - julia> isempty(sent)
+        - true
+        - ```
+        - """
+        6 function Sentence()
+        6     return Sentence(Token[])
+        - end
+        - 
+        - """
+        -     Sentence(str::AbstractString)
+        - 
+        - Create a sentence from `str`.
+        - 
+        - # Example
+        - ```jldoctest
+        - julia> Sentence("hello [X] world")
+        - hello [X] world
+        - ```
+        - """
+      329 function Sentence(str::AbstractString)
+      329     return Sentence([create_token(s) for s in split(str)])
+        - end
+        - 
+        - """
+        -     macro sent_str(str::AbstractString)
+        - 
+        - Create a sentence from `str`.
+        - 
+        - # Example
+        - julia> sent_1 = sent"the test may come today ."
+        - the test may come today .
+        - 
+        - julia> typeof(sent_1)
+        - Sentence
+        - ```
+        - """
+      213 macro sent_str(str::AbstractString)
+      213     return Sentence(str)
+        - end
+        - 
+        - "A view to tokens without owning the underlying storage."
+        - struct SentenceView <: AbstractSentence
+ 49657195     tokens::SubArray{Token,1,Vector{Token},Tuple{UnitRange{Int}},true}
+        - end
+        - 
+        - """
+        -     convert(::Type{Sentence}, sent::SentenceView)
+        - 
+        - Create a new sentence from a sentence view `sent`.
+        - """
+   543783 function Base.convert(::Type{Sentence}, sent::SentenceView)
+   543783     return sent[begin:end]
+        - end
+        - 
+        - """
+        -     convert(::Type{SentenceView}, sent::Sentence)
+        - 
+        - Create a view of `sent`.
+        - """
+        - function Base.convert(::Type{SentenceView}, sent::Sentence)
+        -     return @view sent[begin:end]
+        - end
+        - 
+        - """
+        -     length(sent::AbstractSentence)::Int
+        - 
+        - Return the number of tokens in `sent`.
+        - 
+        - # Example
+        - ```jldoctest
+        - julia> length(sent"hello [X] world")
+        - 3
+        - ```
+        - """
+128138463 function Base.length(sent::AbstractSentence)
+128138463     return length(sent.tokens)
+        - end
+        - 
+        - """
+        -     iterate(sent::AbstractSentence)
+        - 
+        - Iterate through `sent`.
+        - 
+        - # Example
+        - ```jldoctest
+        - julia> sent = sent"hello [X] world";
+        - 
+        - julia> for t in sent println(t) end
+        - hello
+        - [X]
+        - world
+        - ```
+        - """
+ 37153345 function Base.iterate(sent::AbstractSentence)
+ 65250325     return iterate(sent.tokens)
+        - end
+        - 
+122177746 function Base.iterate(sent::AbstractSentence, state)
+148781285     return iterate(sent.tokens, state)
+        - end
+        - 
+ 22460007 function Base.keys(sent::AbstractSentence)
+ 22460007     return keys(sent.tokens)
+        - end
+        - 
+ 17693344 function Base.firstindex(sent::AbstractSentence)
+ 17693344     return firstindex(sent.tokens)
+        - end
+        - 
+ 39956743 function Base.lastindex(sent::AbstractSentence)
+ 39956743     return lastindex(sent.tokens)
+        - end
+        - 
+103435450 function Base.getindex(sent::AbstractSentence, idx::Integer)::Token
+103435450     return sent.tokens[idx]
+        - end
+        - 
+  3002114 function Base.getindex(sent::AbstractSentence, range::AbstractRange)::Sentence
+  3002114     return Sentence(sent.tokens[range])
+        - end
+        - 
+        - function Base.setindex!(sent::AbstractSentence, t::Token, idx::Integer)
+        -     sent.tokens[idx] = t
+        -     return sent
+        - end
+        - 
+ 49657195 function Base.view(sent::AbstractSentence, range::UnitRange)::SentenceView
+ 51734357     return SentenceView(view(sent.tokens, range))
+        - end
+        - 
+        - """
+        -     push!(sent::Sentence, t::Token)
+        - 
+        - Append a new token `t` to the end of `sent`.
+        - 
+        - # Example
+        - ```jldoctest
+        - julia> sent = Sentence("hello world")
+        - hello world
+        - 
+        - julia> push!(sent, word"!")
+        - hello world !
+        - ```
+        - """
+        - function Base.push!(sent::Sentence, t::Token)
+        -     push!(sent.tokens, t)
+        -     return sent
+        - end
+        - 
+        - """
+        -     pushfirst!(sent::Sentence, t::Token)
+        - 
+        - Prepend a new token `t` to the begining of `sent`.
+        - 
+        - # Example
+        - ```jldoctest
+        - julia> sent = sent"hello world"
+        - hello world
+        - 
+        - julia> pushfirst!(sent, word"!")
+        - ! hello world
+        - ```
+        - """
+  1242976 function Base.pushfirst!(sent::Sentence, t::Token)
+  1242976     pushfirst!(sent.tokens, t)
+  1242976     return sent
+        - end
+        - 
+        - """
+        -     append!(sent_1::Sentence, sent_2::AbstractSentence)
+        - 
+        - Append the tokens from `sent_2` to the end of `sent_1`.
+        - 
+        - # Example
+        - ```jldoctest
+        - julia> sent = sent"how are"
+        - how are
+        - 
+        - julia> append!(sent, sent"you ?")
+        - how are you ?
+        - ```
+        - """
+  3606528 function Base.append!(sent_1::Sentence, sent_2::AbstractSentence)
+  3606528     append!(sent_1.tokens, sent_2.tokens)
+  3606528     return sent_1
+        - end
+        - 
+       10 function Base.string(sent::AbstractSentence)
+       10     len = length(sent.tokens)
+       10     buf = IOBuffer(write = true)
+       20     for (i, t) in enumerate(sent.tokens)
+      101         write(buf, string(t))
+      101         if i < len
+       91             write(buf, " ")
+        -         end
+      192     end
+       10     return String(take!(buf))
+        - end
+        - 
+        4 function Base.show(io::IO, sent::AbstractSentence)
+        4     print(io, string(sent))
+        - end
+        - 
+        - """
+        -     get_variables(sent::AbstractSentence)::Set{Variable}
+        - 
+        - Return the set of variables in `sent`.
+        - 
+        - # Example
+        - ```jldoctest
+        - julia> get_variables(Sentence("hello [X] world"))
+        - Set{Token} with 1 element:
+        -   [X]
+        - 
+        - julia> get_variables(Sentence("hello world"))
+        - Set{Token}()
+        - ```
+        - """
+        1 function get_variables(sent::AbstractSentence)::Set{Variable}
+        1     vars = Set{Variable}()
+        1     return get_variables!(sent, vars)
+        - end
+        - 
+   452726 function get_variables!(sent::AbstractSentence, vars::AbstractSet{Variable})::Set{Variable}
+   452726     for t in sent
+  4454542         if is_variable(t) && !(t in vars)
+  1613282             push!(vars, t)
+        -         end
+  4907268     end
+   452726     return vars
+        - end
+        - 
+   452720 function get_variables(sents::AbstractVector{<:AbstractSentence})::Set{Variable}
+   452720     vars = Set{Variable}()
+   452720     for s in sents
+   452725         get_variables!(s, vars)
+   905445     end
+   452720     return vars
+        - end
+        - 
+        - """
+        -     is_identical(x::AbstractSentence, y::AbstractSentence)
+        - 
+        - Test if `x` and `y` are identical (equal without considering ``\\alpha``-conversion).
+        - """
+ 34512972 function is_identical(sent_1::AbstractSentence, sent_2::AbstractSentence)
+ 34512972     return sent_1.tokens == sent_2.tokens
+        - end
+        - 
+        0 function is_identical(
+        -     sents_1::AbstractVector{<:AbstractSentence},
+        -     sents_2::AbstractVector{<:AbstractSentence},
+        - )
+        0     return length(sents_1) == length(sents_2) &&
+        -            all(is_identical(s1, s2) for (s1, s2) in zip(sents_1, sents_2))
+        - end
+        - 
+  4715850 function Base.:(==)(sent_1::AbstractSentence, sent_2::AbstractSentence)
+  4715850     return is_identical(sent_1, sent_2)
+        - end
+        - 
+        - function Base.isless(sent_1::AbstractSentence, sent_2::AbstractSentence)
+        -     return sent_1.tokens < sent_2.tokens
+        - end
+        - 
+        - """
+        -     Base.hash(sent::AbstractSentence, h)
+        - 
+        - Compute the hash code of `sent` without considering ``\\alpha``-conversion.
+        - """
+     5918 function Base.hash(sent::AbstractSentence, h::UInt)::UInt
+     5918     for t in sent.tokens
+     9054         h = hash(t.idx, h)
+    14972     end
+     5918     return h
+        - end
+        - 
+        - """
+        -     alpha_invariant_hash(sent::AbstractSentence, h)
+        - 
+        - Compute the hash code of `sent` modulo ``\\alpha``-conversion.
+        - 
+        - # Example
+        - ```jldoctest
+        - julia> h1 = alpha_invariant_hash(Sentence("how [Y] are [X] you [Y] ?"));
+        - 
+        - julia> h2 = alpha_invariant_hash(Sentence("how [Q] are [X] you [Q] ?"));
+        - 
+        - julia> h1 == h2
+        - true
+        - 
+        - julia> h3 = alpha_invariant_hash(Sentence("how [Q] are [X] you [Z] ?"));
+        - 
+        - julia> h1 == h3
+        - false
+        - ```
+        - """
+    86303 function alpha_invariant_hash(sent::AbstractSentence, h::UInt = 0x0000000000000000)::UInt
+  1009044     num_vars = count(is_variable, sent)
+    57530     if num_vars == 0
+        2         return hash(sent, h)
+        -     end
+        - 
+    57528     vars = Vector{Variable}(undef, num_vars)
+    57528     n = 0
+        - 
+    57528     for t in sent
+   980267         if is_variable(t)
+  1285836             idx = @views findfirst(==(t), vars[1:n])
+   418289             if idx === nothing
+   229138                 n += 1
+   229138                 vars[n] = t
+   229138                 h = hash(-n, h)
+        -             else
+   607440                 h = hash(-idx::Int, h)
+        -             end
+        -         else
+   561978             h = hash(t.idx, h)
+        -         end
+  1037795     end
+    57528     return h
+        - end
+        - 
+        - """
+        -     is_equivalent(x::AbstractSentence, y::AbstractSentence)
+        - 
+        - Test if `x` and `y` are equal modulo alpha-conversion.
+        - 
+        - # Example
+        - ```jldoctest
+        - julia> is_equivalent(Sentence("how [X] are [X] you [Y] ?"), Sentence("how [P] are [P] you [Q] ?"))
+        - true
+        - 
+        - julia> is_equivalent(Sentence("how [X] are [X] you [Y] ?"), Sentence("how [P] are [Q] you [Q] ?"))
+        - false
+        - ```
+        - """
+        9 function is_equivalent(sent_1::AbstractSentence, sent_2::AbstractSentence)
+        9     if length(sent_1) != length(sent_2)
+        0         return false
+        -     end
+        - 
+       76     num_vars = count(is_variable, sent_1)
+        9     if num_vars == 0
+        1         return is_identical(sent_1, sent_2)
+        -     end
+        8     vars = Vector{Tuple{Variable,Variable}}(undef, num_vars)
+        8     n = 0
+        - 
+       16     for (t_1, t_2) in zip(sent_1, sent_2)
+       59         if t_1.type != t_2.type
+        0             return false
+       59         elseif is_variable(t_1)
+      111             idx_1 = @views findfirst(x -> x[1] == t_1, vars[1:n])
+      113             idx_2 = @views findfirst(x -> x[2] == t_2, vars[1:n])
+       31             if (idx_1 === nothing) != (idx_2 === nothing)
+        1                 return false
+       30             elseif idx_1 === nothing
+       23                 n += 1
+       23                 vars[n] = (t_1, t_2)
+       14             elseif idx_1 != idx_2
+       30                 return false
+        -             end
+        -         else
+       28             if t_1 != t_2
+        0                 return false
+        -             end
+        -         end
+      108     end
+        - 
+        6     return true
+        - end
+        - 
+        - function is_equivalent(
+        -     sents_1::AbstractVector{<:AbstractSentence},
+        -     sents_2::AbstractVector{<:AbstractSentence},
+        - )
+        -     if length(sents_1) != length(sents_2)
+        -         return false
+        -     end
+        - 
+        -     num_vars = sum(count(is_variable, sent) for sent in sents_1)
+        -     if num_vars == 0
+        -         return is_identical(sents_1, sents_2)
+        -     end
+        -     vars = Vector{Tuple{Variable,Variable}}(undef, num_vars)
+        -     n = 0
+        - 
+        -     for (sent_1, sent_2) in zip(sents_1, sents_2)
+        -         if length(sent_1) != length(sent_2)
+        -             return false
+        -         end
+        -         for (t_1, t_2) in zip(sent_1, sent_2)
+        -             if t_1.type != t_2.type
+        -                 return false
+        -             elseif is_variable(t_1)
+        -                 idx_1 = @views findfirst(x -> x[1] == t_1, vars[1:n])
+        -                 idx_2 = @views findfirst(x -> x[2] == t_2, vars[1:n])
+        -                 if (idx_1 === nothing) != (idx_2 === nothing)
+        -                     return false
+        -                 elseif idx_1 === nothing
+        -                     n += 1
+        -                     vars[n] = (t_1, t_2)
+        -                 elseif idx_1 != idx_2
+        -                     return false
+        -                 end
+        -             else
+        -                 if t_1 != t_2
+        -                     return false
+        -                 end
+        -             end
+        -         end
+        -     end
+        - 
+        -     return true
+        - end
+        - 
+    62126 function is_equivalent(
+        -     first_sent_1::AbstractSentence,
+        -     sents_remain_1::AbstractVector{<:AbstractSentence},
+        -     first_sent_2::AbstractSentence,
+        -     sents_remain_2::AbstractVector{<:AbstractSentence},
+        - )
+   124018     if length(first_sent_1) != length(first_sent_2) ||
+        -        length(sents_remain_1) != length(sents_remain_2)
+      234         return false
+    61892     elseif isempty(sents_remain_1)
+        0         return is_equivalent(first_sent_1, first_sent_2)
+        -     end
+        - 
+        - 
+  1486635     num_vars =
+        -         count(is_variable, first_sent_1) +
+        -         sum(count(is_variable, sent) for sent in sents_remain_1)
+    61892     if num_vars == 0
+        0         return is_identical(first_sent_1, first_sent_2) &&
+        -                is_identical(sents_remain_1, sents_remain_2)
+        -     end
+    61892     vars = Vector{Tuple{Variable,Variable}}(undef, num_vars)
+    61892     n = 0
+        - 
+   123784     for (t_1, t_2) in zip(first_sent_1, first_sent_2)
+  1486251         if t_1.type != t_2.type
+        0             return false
+  1486251         elseif is_variable(t_1)
+  3654789             idx_1 = @views findfirst(x -> x[1] == t_1, vars[1:n])
+  3654789             idx_2 = @views findfirst(x -> x[2] == t_2, vars[1:n])
+   650325             if (idx_1 === nothing) != (idx_2 === nothing)
+       24                 return false
+   650301             elseif idx_1 === nothing
+   245902                 n += 1
+   245902                 vars[n] = (t_1, t_2)
+   808798             elseif idx_1 != idx_2
+   650301                 return false
+        -             end
+        -         else
+   835926             if t_1 != t_2
+        0                 return false
+        -             end
+        -         end
+  2910586     end
+        - 
+   123736     for (sent_1, sent_2) in zip(sents_remain_1, sents_remain_2)
+    61872         if length(sent_1) != length(sent_2)
+        3             return false
+        -         end
+   123738         for (t_1, t_2) in zip(sent_1, sent_2)
+   395891             if t_1.type != t_2.type
+        0                 return false
+   395891             elseif is_variable(t_1)
+   772503                 idx_1 = @views findfirst(x -> x[1] == t_1, vars[1:n])
+   635337                 idx_2 = @views findfirst(x -> x[2] == t_2, vars[1:n])
+   136097                 if (idx_1 === nothing) != (idx_2 === nothing)
+     1056                     return false
+   135041                 elseif idx_1 === nothing
+      109                     n += 1
+      109                     vars[n] = (t_1, t_2)
+   269864                 elseif idx_1 != idx_2
+   135041                     return false
+        -                 end
+        -             else
+   259794                 if t_1 != t_2
+        0                     return false
+        -                 end
+        -             end
+   668053         end
+       13     end
+        - 
+        5     return true
+        - end
+        - 
+        - """
+        -     is_concrete(sent::AbstractSentence)
+        - 
+        - Test if `sent` is a concrete sentence (i.e., sentences without variable).
+        - 
+        - # Example
+        - ```jldoctest
+        - julia> is_concrete(Sentence("hello [X] world"))
+        - false
+        - 
+        - julia> is_concrete(Sentence("hello world"))
+        - true
+        - ```
+        - """
+   453828 function is_concrete(sent::AbstractSentence)
+   454063     return all(!is_variable(t) for t in sent)
+        - end
+        - 
+        - """
+        -     has_no_special_symbol(sent::AbstractSentence)
+        - 
+        - Test if `sent` has no special symbol.
+        - 
+        - # Example
+        - ```jldoctest
+        - julia> has_no_special_symbol(Sentence("hello [X] world"))
+        - true
+        - 
+        - julia> has_no_special_symbol(Sentence("\\\$TRUE\\\$ hello world"))
+        - false
+        - ```
+        - """
+   602108 function has_no_special_symbol(sent::AbstractSentence)
+   958872     return all(!is_special_symbol(t) for t in sent)
+        - end
+        - 
+        - """
+        -     startswith_word(sent::AbstractSentence)
+        - 
+        - Test if `sent` starts with a word.
+        - 
+        - # Example
+        - ```jldoctest
+        - julia> startswith_word(Sentence("how [X] are you ?"))
+        - true
+        - 
+        - julia> startswith_word(Sentence("[X] are you ?"))
+        - false
+        - 
+        - julia> startswith_word(Sentence())
+        - false
+        - ```
+        - """
+      217 function startswith_word(sent::AbstractSentence)
+      217     return !isempty(sent) && is_word(sent[begin])
+        - end
+        - 
+        - """
+        -     startswith_variable(sent::AbstractSentence)
+        - 
+        - Test if `sent` starts with a variable.
+        - """
+        3 function startswith_variable(sent::AbstractSentence)
+        3     return !isempty(sent) && is_variable(sent[begin])
+        - end
+        - 
+        - """
+        -     startswith_special_symbol(sent::AbstractSentence)
+        - 
+        - Test if `sent` starts with a special symbol.
+        - """
+        - function startswith_special_symbol(sent::AbstractSentence)
+        -     return !isempty(sent) && is_special_symbol(sent[begin])
+        - end
+        - 
+        - """
+        -     endswith_word(sent::AbstractSentence)
+        - 
+        - Test if `sent` ends with a word.
+        - """
+        - function endswith_word(sent::AbstractSentence)
+        -     return !isempty(sent) && is_word(sent[end])
+        - end
+        - 
+        - """
+        -     is_one_variable(sent::AbstractSentence)
+        - 
+        - Test if `sent` has a single token, which is a variable.
+        - 
+        - # Example
+        - ```jldoctest
+        - julia> is_one_variable(Sentence("[X]"))
+        - true
+        - 
+        - julia> is_one_variable(Sentence("[X] [Y]"))
+        - false
+        - 
+        - julia> is_one_variable(Sentence("hi [X]"))
+        - false
+        - 
+        - julia> is_one_variable(Sentence())
+        - false
+        - ```
+        - """
+    18900 function is_one_variable(sent::AbstractSentence)
+    37673     return length(sent) == 1 && is_variable(sent[begin])
+        - end
+        - 
+        - """
+        -     has_only_variables(sent::AbstractSentence)::Bool
+        - 
+        - Test if `sent` has only variables.
+        - 
+        - # Example
+        - ```jldoctest
+        - julia> has_only_variables(Sentence("[X]"))
+        - true
+        - 
+        - julia> has_only_variables(Sentence("[X] [Y]"))
+        - true
+        - 
+        - julia> has_only_variables(Sentence("hi [X]"))
+        - false
+        - 
+        - julia> has_only_variables(Sentence())
+        - false
+        - ```
+        - """
+        4 function has_only_variables(sent::AbstractSentence)
+        4     return !isempty(sent) && all(is_variable(t) for t in sent)
+        - end
+        - 
+   653070 function Base.findfirst(
+        -     sent_1::AbstractSentence,
+        -     sent_2::AbstractSentence,
+        - )::Union{Nothing,UnitRange{Int}}
+   653070     len_1 = length(sent_1)
+  1304693     for i = 1:length(sent_2)-len_1+1
+  5002539         if is_identical(sent_1, view(sent_2, i:i+len_1-1))
+   642505             return i:i+len_1-1
+        -         end
+  8710950     end
+    10565     return nothing
+        - end
+        - 
+        - function Base.findall(
+        -     sent_1::AbstractSentence,
+        -     sent_2::AbstractSentence,
+        - )::Vector{UnitRange{Int}}
+        -     matches = UnitRange{Int}[]
+        -     len_1 = length(sent_1)
+        -     for i = 1:length(sent_2)-len_1+1
+        -         if is_identical(sent_1, view(sent_2, i:i+len_1-1))
+        -             push!(matches, i:i+len_1-1)
+        -         end
+        -     end
+        -     return matches
+        - end
+        - 
+        - """
+        -     occursin(x::AbstractSentence, y::AbstractSentence)
+        - 
+        - Test if `x` is a sub-sentence of `y`.
+        - 
+        - # Example
+        - ```jldoctest
+        - julia> occursin(sent"world !", sent"hello world !")
+        - true
+        - 
+        - julia> occursin(sent"world ?", sent"hello world !")
+        - false
+        - ```
+        - """
+   653070 function Base.occursin(sent_1::AbstractSentence, sent_2::AbstractSentence)
+   653070     return findfirst(sent_1, sent_2) !== nothing
+        - end
+        - 
+        - function Base.occursin(t::Token, sent::AbstractSentence)
+        -     return t in sent.tokens
+        - end
+        - 
+   544308 function Base.in(t::Token, sent::AbstractSentence)
+  5378402     return t in sent.tokens
+        - end
+        - 
+        - """
+        -     startswith(x::AbstractSentence, y::AbstractSentence)
+        - 
+        - Test if `x` starts with a sub-sentence `y`.
+        - 
+        - # Example
+        - ```jldoctest
+        - julia> startswith(sent"hello world !", sent"hello world")
+        - true
+        - 
+        - julia> startswith(sent"hello world !", sent"world !")
+        - false
+        - ```
+        - """
+  8208425 function Base.startswith(sent_1::AbstractSentence, sent_2::AbstractSentence)
+  8208425     return length(sent_2) <= length(sent_1) &&
+        -            is_identical((@view sent_1[1:length(sent_2)]), sent_2)
+        - end
+        - 
+        - function Base.endswith(sent_1::AbstractSentence, sent_2::AbstractSentence)
+        -     return length(sent_2) <= length(sent_1) &&
+        -            is_identical((@view sent_1[end-length(sent_2)+1:end]), sent_2)
+        - end
+        - 
+        - function get_de_bruijn(
+        -     sent::AbstractSentence,
+        -     vars::Vector{Variable} = Variable[],
+        - )::Tuple{Sentence,Vector{Variable}}
+        -     tokens = Vector{Token}(undef, length(sent))
+        - 
+        -     for (j, t) in enumerate(sent)
+        -         if is_variable(t)
+        -             idx = findfirst(==(t), vars)
+        -             if idx === nothing
+        -                 push!(vars, t)
+        -                 idx = length(vars)
+        -             end
+        -             tokens[j] = create_variable(-idx)
+        -         else
+        -             tokens[j] = t
+        -         end
+        -     end
+        - 
+        -     return Sentence(tokens), vars
+        - end
+        - 
+        - function get_de_bruijn(
+        -     sents::AbstractVector{<:AbstractSentence},
+        - )::Tuple{Vector{Sentence},Vector{Variable}}
+        -     vars = Variable[]
+        -     result = Vector{Sentence}(undef, length(sents))
+        -     for (j, sent) in enumerate(sents)
+        -         result[j] = get_de_bruijn(sent, vars)[1]
+        -     end
+        -     return result, vars
+        - end
+        - 
+        - """
+        -     concat(sent_1::AbstractSentence, sent_2::AbstractSentence)::Sentence
+        - 
+        - Concatenate `sent_1` and `sent_2`.
+        - 
+        - # Example
+        - ```jldoctest
+        - julia> concat(Sentence("how are"), Sentence("you ?"))
+        - how are you ?
+        - ```
+        - """
+        2 function concat(sent_1::AbstractSentence, sent_2::AbstractSentence)::Sentence
+        2     return Sentence([sent_1.tokens; sent_2.tokens])
+        - end
+        - 
+        - """
+        -     concat(t::Token, sent::AbstractSentence)::Sentence
+        - 
+        - Concatenate `t` and `sent`.
+        - 
+        - # Example
+        - ```jldoctest
+        - julia> concat(word"are", sent"you ?")
+        - are you ?
+        - ```
+        - """
+       51 function concat(t::Token, sent::AbstractSentence)::Sentence
+       51     return Sentence([t; sent.tokens])
+        - end
+        - 
+        - """
+        -     concat(sent::AbstractSentence, t::Token)::Sentence
+        - 
+        - Concatenate `sent` and `t`.
+        - 
+        - # Example
+        - ```jldoctest
+        - julia> concat(sent"how are", word"you")
+        - how are you
+        - ```
+        - """
+        3 function concat(sent::AbstractSentence, t::Token)::Sentence
+        3     return Sentence([sent.tokens; t])
+        - end
+        - 
+      944 function Base.join(sents::AbstractVector{<:AbstractSentence}, delim::Token)::Sentence
+     1888     len = sum(length(s) for s in sents) + length(sents) - 1
+      944     tokens = Vector{Token}(undef, len)
+      944     j = 1
+     1888     for (i, s) in enumerate(sents)
+     2052         for t in s
+    31995             tokens[j] = t
+    31995             j += 1
+    34047         end
+     2052         if i < length(sents)
+     1108             tokens[j] = delim
+     1108             j += 1
+        -         end
+     3160     end
+      944     return Sentence(tokens)
+        - end
+        - 
+        - """
+        -     (sent_1::AbstractSentence) * (sent_2::AbstractSentence)
+        - 
+        - An alias of [`concat`](@ref).
+        - 
+        - # Example
+        - ```jldoctest
+        - julia> Sentence("how are") * Sentence("you ?")
+        - how are you ?
+        - ```
+        - """
+       56 function Base.:*(
+        -     sent_1::Union{AbstractSentence,Token},
+        -     sent_2::Union{AbstractSentence,Token},
+        - )::Sentence
+       56     return concat(sent_1, sent_2)
+        - end
+        - 
+        - 
+        - """
+        -     prefix, suffix_1, suffix_2 = find_common_prefix(sent_1, sent_2; requires_concrete::Bool)
+        - 
+        - Split `sent_1` and `sent_2` into a common prefix and two different suffixes.
+        - 
+        - If `requires_concrete == true`, then `prefix` is required to be a concrete prefix.
+        - 
+        - # Example
+        - ```jldoctest
+        - julia> sent_1 = Sentence("hello world [X] world foo foo");
+        - 
+        - julia> sent_2 = Sentence("hello world [X] world bar bar");
+        - 
+        - julia> find_common_prefix(sent_1, sent_2, requires_concrete=true)
+        - (hello world, [X] world foo foo, [X] world bar bar)
+        - 
+        - julia> find_common_prefix(sent_1, sent_2, requires_concrete=false)
+        - (hello world [X] world, foo foo, bar bar)
+        - ```
+        - """
+  1775740 function find_common_prefix(
+        -     sent_1::AbstractSentence,
+        -     sent_2::AbstractSentence;
+        -     requires_concrete::Bool,
+        - )::NTuple{3,SentenceView}
+   887870     diff_idx = min(length(sent_1), length(sent_2)) + 1
+  1775740     for (i, (t_1, t_2)) in enumerate(zip(sent_1, sent_2))
+  2555696         if t_1 != t_2 || (requires_concrete && is_variable(t_1))
+   887862             diff_idx = i
+   887862             break
+        -         end
+   833914     end
+   887938     prefix = @view sent_1[1:diff_idx-1]
+   887870     suffix_1 = @view sent_1[diff_idx:end]
+   887870     suffix_2 = @view sent_2[diff_idx:end]
+   887870     return prefix, suffix_1, suffix_2
+        - end
+        - 
+        - """
+        -     prefix_1, prefix_2, suffix = find_common_suffix(sent_1, sent_2; requires_concrete::Bool)
+        - 
+        - Split `sent_1` and `sent_2` into a common suffix and two different prefixes.
+        - 
+        - If `requires_concrete == true`, then `suffix` is required to be a concrete suffix.
+        - """
+  1775740 function find_common_suffix(
+        -     sent_1::AbstractSentence,
+        -     sent_2::AbstractSentence;
+        -     requires_concrete::Bool,
+        - )::NTuple{3,SentenceView}
+   887870     min_len = min(length(sent_1), length(sent_2))
+   887870     diff_rev_idx = min_len + 1
+  1775732     for i = 1:min_len
+   995394         t_1 = sent_1[end+1-i]
+   995394         t_2 = sent_2[end+1-i]
+  1102935         if t_1 != t_2 || (requires_concrete && is_variable(t_1))
+   887861             diff_rev_idx = i
+   887861             break
+        -         end
+   107533     end
+   887877     prefix_1 = @view sent_1[1:end+1-diff_rev_idx]
+   887877     prefix_2 = @view sent_2[1:end+1-diff_rev_idx]
+  1721974     suffix = @view sent_1[end+1-diff_rev_idx+1:end]
+        - 
+   887870     return prefix_1, prefix_2, suffix
+        - end
+        - 
+        - """
+        -     infix_1, infix_2 = find_different_infixes(sent_1, sent_2; requires_concrete::Bool)
+        - 
+        - Return the different infixes of `sent_1` and `sent_2`.
+        - """
+      198 function find_different_infixes(
+        -     sent_1::AbstractSentence,
+        -     sent_2::AbstractSentence;
+        -     requires_concrete::Bool,
+        - )::NTuple{2,SentenceView}
+       99     _, suffix_1, suffix_2 =
+        -         find_common_prefix(sent_1, sent_2, requires_concrete = requires_concrete)
+       99     infix_1, infix_2, _ =
+        -         find_common_suffix(suffix_1, suffix_2, requires_concrete = requires_concrete)
+       99     return infix_1, infix_2
+        - end
+        - 
+        - """
+        -     flip_variables(sent::AbstractSentence)::Sentence
+        - 
+        - Flip the signs of the variable indexs in `sent`. 
+        - 
+        - Variables with negative indexes are for internal use only.
+        - """
+        - function flip_variables(sent::AbstractSentence)
+        -     return Sentence([is_variable(t) ? create_variable(-t.idx) : t for t in sent])
+        - end
+        - 
+        - export AbstractSentence,
+        -     Sentence,
+        -     SentenceView,
+        -     @sent_str,
+        -     is_concrete,
+        -     has_no_special_symbol,
+        -     get_variables,
+        -     is_one_variable,
+        -     has_only_variables,
+        -     startswith_word,
+        -     startswith_variable,
+        -     startswith_special_symbol,
+        -     endswith_word,
+        -     is_equivalent,
+        -     is_identical,
+        -     alpha_invariant_hash,
+        -     get_de_bruijn,
+        -     concat,
+        -     find_common_prefix,
+        -     find_common_suffix,
+        -     find_different_infixes,
+        -     flip_variables

@@ -1,0 +1,71 @@
+---
+walk $MAPS_TO$ I_WALK
+
+---
+look $MAPS_TO$ I_LOOK
+
+---
+run $MAPS_TO$ I_RUN
+
+---
+jump $MAPS_TO$ I_JUMP
+
+---
+turn right $MAPS_TO$ I_TURN_RIGHT
+
+---
+turn left $MAPS_TO$ I_TURN_LEFT
+
+[A] $MAPS_TO$ [B]
+---
+[A] left $MAPS_TO$ I_TURN_LEFT [B]
+
+[A] $MAPS_TO$ [B]
+---
+[A] right $MAPS_TO$ I_TURN_RIGHT [B]
+
+---
+turn opposite left $MAPS_TO$ I_TURN_LEFT I_TURN_LEFT
+
+---
+turn opposite right $MAPS_TO$ I_TURN_RIGHT I_TURN_RIGHT
+
+[A] $MAPS_TO$ [B]
+---
+[A] opposite left $MAPS_TO$ I_TURN_LEFT I_TURN_LEFT [B]
+
+[A] $MAPS_TO$ [B]
+---
+[A] opposite right $MAPS_TO$ I_TURN_RIGHT I_TURN_RIGHT [B]
+
+---
+turn around left $MAPS_TO$ I_TURN_LEFT I_TURN_LEFT I_TURN_LEFT I_TURN_LEFT
+
+---
+turn around right $MAPS_TO$ I_TURN_RIGHT I_TURN_RIGHT I_TURN_RIGHT I_TURN_RIGHT
+
+[A] $MAPS_TO$ [B]
+---
+[A] around left $MAPS_TO$ I_TURN_LEFT [B] I_TURN_LEFT [B] I_TURN_LEFT [B] I_TURN_LEFT [B]
+
+[A] $MAPS_TO$ [B]
+---
+[A] around right $MAPS_TO$ I_TURN_RIGHT [B] I_TURN_RIGHT [B] I_TURN_RIGHT [B] I_TURN_RIGHT [B]
+
+[A] $MAPS_TO$ [B]
+---
+[A] twice $MAPS_TO$ [B] [B]
+
+[A] $MAPS_TO$ [B]
+---
+[A] thrice $MAPS_TO$ [B] [B] [B]
+
+[A] $MAPS_TO$ [B]
+[C] $MAPS_TO$ [D]
+---
+[C] and [A] $MAPS_TO$ [D] [B]
+
+[A] $MAPS_TO$ [B]
+[C] $MAPS_TO$ [D]
+---
+[A] after [C] $MAPS_TO$ [D] [B]

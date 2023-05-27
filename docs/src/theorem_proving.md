@@ -1,0 +1,5 @@
+# TheoremProving
+
+```@autodocs
+Modules = [TheoremProving]
+```

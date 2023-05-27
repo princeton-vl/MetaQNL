@@ -1,0 +1,5 @@
+include("example.jl")
+include("dataset.jl")
+include("scan.jl")
+include("rule_taker.jl")
+include("sigmorphon2018.jl")

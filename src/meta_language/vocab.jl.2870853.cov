@@ -1,0 +1,156 @@
+        - using Serialization: serialize, deserialize
+        - 
+        - """
+        - A vocabulary is a bijection between strings and their indexes (integers).
+        - 
+        - Three built-in vocabularies are accessible globally:
+        - * [`word_vocab`](@ref) for words, ``\\Sigma_w``
+        - * [`variable_vocab`](@ref) for variables, ``\\Sigma_v``
+        - * [`special_symbol_vocab`](@ref) for special symbols, ``\\Sigma_s``
+        - Users usually do not need to create new vocabularies.
+        - """
+        - struct Vocab
+        -     idx2str::Vector{String}
+        -     str2idx::Dict{String,Int}
+        -     valid_pattern::Regex
+        - 
+        3     function Vocab(idx2str, valid_pattern)
+        3         str2idx = Dict(str => idx for (idx, str) in enumerate(idx2str))
+        3         @assert all(match(valid_pattern, str) !== nothing for str in idx2str)
+        3         return new(idx2str, str2idx, valid_pattern)
+        -     end
+        - end
+        - 
+        3 function Vocab(valid_pattern::Regex)
+        3     return Vocab(String[], valid_pattern)
+        - end
+        - 
+        - """
+        -     vocab[idx]
+        - 
+        - Return the `idx`th string in `vocab`.
+        - """
+      106 function Base.getindex(vocab::Vocab, idx::Integer)
+      106     return vocab.idx2str[idx]
+        - end
+        - 
+        - """
+        -     vocab[str]
+        - 
+        - Return the index of `str` in `vocab`; add `str` to the vocabulary if it does not already exist.
+        - """
+  3623638 function Base.getindex(vocab::Vocab, str::AbstractString)
+  7247178     idx = get(vocab.str2idx, str, nothing)
+  3623638     if idx === nothing
+       99         @assert match(vocab.valid_pattern, str) !== nothing "Invalid token \"$str\""
+       97         push!(vocab.idx2str, str)
+       97         idx = length(vocab.idx2str)
+       97         vocab.str2idx[str] = idx
+        -     end
+  3623637     return idx
+        - end
+        - 
+        - function Base.iterate(vocab::Vocab)
+        -     return iterate(vocab.idx2str)
+        - end
+        - 
+        - function Base.iterate(vocab::Vocab, state)
+        -     return iterate(vocab.idx2str, state)
+        - end
+        - 
+        9 function Base.length(vocab::Vocab)
+        9     return length(vocab.idx2str)
+        - end
+        - 
+        - """
+        -     push!(vocab, str)
+        - 
+        - Add a new token `str` to `vocab`.
+        - """
+       59 function Base.push!(vocab::Vocab, str)
+       59     @assert match(vocab.valid_pattern, str) !== nothing "Invalid token \"$str\""
+       59     if !haskey(vocab.str2idx, str)
+       59         push!(vocab.idx2str, str)
+       59         vocab.str2idx[str] = length(vocab.idx2str)
+        -     end
+       59     return vocab
+        - end
+        - 
+        - """
+        -     append!(vocab, strs)
+        - 
+        - Add multiple new tokens `strs` to `vocab`.
+        - """
+        4 function Base.append!(vocab::Vocab, strs)
+        4     for s in strs
+       58         push!(vocab, s)
+       62     end
+        4     return vocab
+        - end
+        - 
+        4 function Base.empty!(vocab::Vocab)
+        4     empty!(vocab.idx2str)
+        4     empty!(vocab.str2idx)
+        4     return vocab
+        - end
+        - 
+        - """
+        -     Word vocabulary ``\\Sigma_w``
+        - 
+        - Words must conform to the regular expression `^[^\\s\\[\\]\\\$]+\$`.
+        - """
+        - const word_vocab = Vocab(r"^[^\s\[\]\$]+$")
+        - 
+        - """
+        -     Variable vocabulary ``\\Sigma_v``
+        - 
+        - Variables must conform to the regular expression `^[A-Z]+\$`.
+        - """
+        - const variable_vocab = Vocab(r"^[A-Z]+$")
+        - 
+        - """
+        - Special symbol vocabulary ``\\Sigma_s``
+        - 
+        - Special symbols must conform to the regular expression `^[^\\s\\[\\]\\\$]+\$`.
+        - """
+        - const special_symbol_vocab = Vocab(r"^[^\s\[\]\$]+$")
+        - 
+        - """
+        -     save_vocabs(filename::AbstractString)
+        - 
+        - Save the three vocabularies to `filename`.
+        - """
+        1 function save_vocabs(filename::AbstractString)
+        1     serialize(
+        -         filename,
+        -         Dict(
+        -             "word" => word_vocab.idx2str,
+        -             "variable" => variable_vocab.idx2str,
+        -             "special_symbol" => special_symbol_vocab.idx2str,
+        -         ),
+        -     )
+        - end
+        - 
+        4 function reset_vocab!(vocab, idx2str)
+        4     @assert length(vocab) <= length(idx2str) && idx2str[1:length(vocab)] == vocab.idx2str "The new vocab is incompatible with the existing one."
+        4     empty!(vocab)
+        4     return append!(vocab, idx2str)
+        - end
+        - 
+        - """
+        -     load_vocabs(filename::AbstractString)
+        - 
+        - Load the three vocabularies from `filename`.
+        - """
+        1 function load_vocabs(filename::AbstractString)
+        1     vocabs = deserialize(filename)
+        1     reset_vocab!(word_vocab, vocabs["word"])
+        1     reset_vocab!(variable_vocab, vocabs["variable"])
+        1     reset_vocab!(special_symbol_vocab, vocabs["special_symbol"])
+        1     return nothing
+        - end
+        - 
+        - reset_vocab!(variable_vocab, [string('A' + i) for i = 0:25])
+        - 
+        - export word_vocab,
+        -     variable_vocab, special_symbol_vocab, save_vocabs, reset_vocab!, load_vocabs

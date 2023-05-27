@@ -1,0 +1,786 @@
+        - # This is much faster but restricts to no more than 1 free variable
+        - using Combinatorics: permutations
+        - 
+        - struct BiSubstitutionNode
+        -     parent::Union{BiSubstitutionNode,Nothing}
+        -     var::Variable
+        -     sent_1::Sentence
+        -     sent_2::Sentence
+        - end
+        - 
+        - function BiSubstitutionNode(var, sent_1, sent_2)
+        -     return BiSubstitutionNode(nothing, var, sent_1, sent_2)
+        - end
+        - 
+        - mutable struct BiSubstitution
+        -     leaf::Union{BiSubstitutionNode,Nothing}
+        -     accepts_free_variable::Bool
+        - end
+        - 
+        - function BiSubstitution()
+        -     return BiSubstitution(nothing, true)
+        - end
+        - 
+        - function Base.iterate(bi_subst::BiSubstitution)
+        -     if bi_subst.leaf === nothing
+        -         return nothing
+        -     end
+        -     node = bi_subst.leaf
+        -     return (node.var, (node.sent_1, node.sent_2)), bi_subst.leaf.parent
+        - end
+        - 
+        - function Base.iterate(::BiSubstitution, node)
+        -     if node === nothing
+        -         return nothing
+        -     end
+        -     return (node.var, (node.sent_1, node.sent_2)), node.parent
+        - end
+        - 
+        - function Base.:(==)(bi_subst_1::BiSubstitution, bi_subst_2::BiSubstitution)
+        -     return get_substitutions(bi_subst_1) == get_substitutions(bi_subst_2)
+        - end
+        - 
+        - function get_substitutions(bi_subst::BiSubstitution)
+        0     subst_1 = Substitution()
+        0     subst_2 = Substitution()
+        0     for (var, (sent_1, sent_2)) in bi_subst
+        0         subst_1[var] = sent_1
+        0         subst_2[var] = sent_2
+        0     end
+        0     return subst_1, subst_2
+        - end
+        - 
+        - function retrieve_variable(
+        -     bi_subst::BiSubstitution,
+        -     sent_1::AbstractSentence,
+        -     sent_2::AbstractSentence,
+        - )::Tuple{Variable,Bool}
+        0     for (var, (s_1, s_2)) in bi_subst
+        0         if is_identical(sent_1, s_1) && is_identical(sent_2, s_2)
+        0             return var, false
+        -         end
+        0     end
+        0     new_var = isempty(bi_subst) ? first_variable() : next_variable(bi_subst.leaf.var)
+        0     return new_var, true
+        - end
+        - 
+        - function push(
+        -     bi_subst::BiSubstitution,
+        -     var::Variable,
+        -     sent_1::Sentence,
+        -     sent_2::Sentence,
+        -     is_free::Bool,
+        - )
+        -     @assert bi_subst.accepts_free_variable || !is_free
+        -     node = BiSubstitutionNode(bi_subst.leaf, var, sent_1, sent_2)
+        -     return BiSubstitution(node, bi_subst.accepts_free_variable && !is_free)
+        - end
+        - 
+        - function push(
+        -     bi_subst::BiSubstitution,
+        -     var::Variable,
+        -     sent_1::SentenceView,
+        -     sent_2::SentenceView,
+        -     is_free::Bool,
+        - )
+        -     return push(bi_subst, var, sent_1[begin:end], sent_2[begin:end], is_free)
+        - end
+        - 
+        - function bind_variable!(
+        -     bi_subst::BiSubstitution,
+        -     sent_1::AbstractSentence,
+        -     sent_2::AbstractSentence,
+        -     sents_remain_1,
+        -     sents_remain_2,
+        - )::Tuple{Variable,Union{Nothing,BiSubstitution}}
+        -     var, is_new = retrieve_variable(bi_subst, sent_1, sent_2)
+        -     if is_new
+        -         is_free = !occurs_in_remaining(sent_1, sent_2, sents_remain_1, sents_remain_2)
+        -         if is_free && !bi_subst.accepts_free_variable
+        -             return var, nothing
+        -         else
+        -             return var, push(bi_subst, var, sent_1, sent_2, is_free)
+        -         end
+        -     else
+        -         return var, bi_subst
+        -     end
+        - end
+        - 
+        - 
+        - function Base.show(io::IO, bi_subst::BiSubstitution)
+        -     print(io, "{")
+        -     for (var, (sent_1, sent_2)) in bi_subst
+        -         print(io, var, " -> (\"", sent_1, "\", \"", sent_2, "\"), ")
+        -     end
+        -     print(io, "}")
+        - end
+        - 
+        - struct AntiUnifier{T<:Union{Sentence,Rule,Vector{Sentence}}}
+        -     general_instance::T
+        -     bi_substitution::BiSubstitution
+        - end
+        - 
+        - function AntiUnifier(sent::SentenceView, bi_subst)
+        -     return AntiUnifier{Sentence}(sent[begin:end], bi_subst)
+        - end
+        - 
+        - function Base.:(==)(au_1::AntiUnifier, au_2::AntiUnifier)
+        0     return au_1.general_instance == au_2.general_instance &&
+        -            au_1.bi_substitution == au_2.bi_substitution
+        - end
+        - 
+        - function get_specific_instances(au::AntiUnifier)
+        -     subst_1, subst_2 = get_substitutions(au.bi_substitution)
+        -     return subst_1(au.general_instance), subst_2(au.general_instance)
+        - end
+        - 
+        - function occurs_in_remaining(
+        -     sent::AbstractSentence,
+        -     remaining_sents::Union{Vector{<:AbstractSentence},Nothing},
+        - )
+        -     return remaining_sents === nothing || any(occursin(sent, s) for s in remaining_sents)
+        - end
+        - 
+        - function occurs_in_remaining(
+        -     sent_1::AbstractSentence,
+        -     sent_2::AbstractSentence,
+        -     sents_remain_1::Union{Vector{<:AbstractSentence},Nothing},
+        -     sents_remain_2::Union{Vector{<:AbstractSentence},Nothing},
+        - )
+        -     return occurs_in_remaining(sent_1, sents_remain_1) &&
+        -            occurs_in_remaining(sent_2, sents_remain_2)
+        - end
+        - 
+        - function can_match(
+        -     suffix_1::AbstractSentence,
+        -     suffix_2::AbstractSentence,
+        -     bi_subst::BiSubstitution,
+        - )
+        0     if length(suffix_1) == length(suffix_2)
+        0         return true
+        0     elseif isempty(suffix_1) || isempty(suffix_2)
+        0         return false
+        -     end
+        - 
+        0     for (_, (sent_1, sent_2)) in bi_subst
+        0         if startswith(suffix_1, sent_1) &&
+        -            startswith(suffix_2, sent_2) &&
+        -            (is_identical(suffix_1, sent_1) == is_identical(suffix_2, sent_2))
+        0             return true
+        -         end
+        0     end
+        - 
+        -     # return true
+        0     return suffix_1[begin] == suffix_2[begin] &&
+        -            ((length(suffix_1) == 1) == (length(suffix_2) == 1))
+        - end
+        - 
+        - function anti_unify(
+        -     sent_1::AbstractSentence,
+        -     sent_2::AbstractSentence,
+        -     sents_remain_1::Union{Vector{Sentence},Nothing} = nothing,
+        -     sents_remain_2::Union{Vector{Sentence},Nothing} = nothing,
+        -     bi_subst::BiSubstitution = BiSubstitution(),
+        - )::Vector{AntiUnifier{Sentence}}
+        0     if sent_1 == sent_2 && is_concrete(sent_1)
+      240         return [AntiUnifier(sent_1, bi_subst)]
+        -     end
+        - 
+        0     if has_no_special_symbol(sent_1) && has_no_special_symbol(sent_2)
+        0         return anti_unify_no_special_symbol(
+        -             sent_1,
+        -             sent_2,
+        -             sents_remain_1,
+        -             sents_remain_2,
+        -             bi_subst,
+        -         )
+        -     end
+        - 
+        0     tpl_1, segments_1 = decompose(sent_1)
+        0     tpl_2, segments_2 = decompose(sent_2)
+        0     if tpl_1 != tpl_2
+        0         return AntiUnifier{Sentence}[]
+        -     end
+        - 
+        0     return [
+        -         AntiUnifier(compose(tpl_1, au.general_instance), au.bi_substitution) for
+        -         au in anti_unify_no_special_symbol(
+        -             segments_1,
+        -             segments_2,
+        -             sents_remain_1,
+        -             sents_remain_2,
+        -             bi_subst,
+        -         )
+        -     ]
+        - end
+        - 
+        - function anti_unify(
+        -     sents_1::AbstractVector{<:AbstractSentence},
+        -     sents_2::AbstractVector{<:AbstractSentence},
+        -     sents_remain_1::Union{Vector{Sentence},Nothing},
+        -     sents_remain_2::Union{Vector{Sentence},Nothing},
+        -     bi_subst::BiSubstitution,
+        - )::Vector{AntiUnifier{Vector{Sentence}}}
+        0     @assert length(sents_1) == length(sents_2)
+        0     if isempty(sents_1)
+        0         return [AntiUnifier(Sentence[], bi_subst)]
+        -     end
+        - 
+        0     if all(has_no_special_symbol(s) for s in sents_1) &&
+        -        all(has_no_special_symbol(s) for s in sents_2)
+        0         return anti_unify_no_special_symbol(
+        -             sents_1,
+        -             sents_2,
+        -             sents_remain_1,
+        -             sents_remain_2,
+        -             bi_subst,
+        -         )
+        -     end
+        - 
+        0     all_tpls_1, all_segments_1 = decompose(sents_1)
+        0     all_tpls_2, all_segments_2 = decompose(sents_2)
+        0     if all_tpls_1 != all_tpls_2
+        0         return AntiUnifier{Vector{Sentence}}[]
+        -     end
+        - 
+        0     aus = anti_unify_no_special_symbol(
+        -         reduce(vcat, all_segments_1),
+        -         reduce(vcat, all_segments_2),
+        -         sents_remain_1,
+        -         sents_remain_2,
+        -         bi_subst,
+        -     )
+ 10684224     results = Vector{AntiUnifier{Vector{Sentence}}}(undef, length(aus))
+        - 
+        0     for (i, au) in enumerate(aus)
+ 28973824         all_segs = Vector{Vector{Sentence}}(undef, length(all_segments_1))
+        0         base = 1
+        0         for (j, s) in enumerate(all_segments_1)
+        0             l = length(s)
+ 36217440             all_segs[j] = au.general_instance[base:base+l-1]
+        0             base += l
+        0         end
+        0         general_instance = compose(all_tpls_1, all_segs)
+        0         results[i] = AntiUnifier(general_instance, au.bi_substitution)
+        0     end
+        - 
+        0     return results
+        - end
+        - 
+        - function anti_unify(rule_1::Rule, rule_2::Rule)::Vector{Rule}
+        0     if length(rule_1.premises) != length(rule_2.premises)
+        0         return Rule[]
+        -     end
+        - 
+  6884768     t = @elapsed begin
+        -         results = Set{Rule}()
+        - 
+        -         #=
+        -         sents_1 = [rule_1.premises; rule_1.conclusion]
+        -         for permuted_prems_2 in permutations(rule_2.premises)
+        -             sents_2 = [permuted_prems_2; rule_2.conclusion]
+        -             for au in anti_unify(
+        -                 sents_1,
+        -                 sents_2,
+        -                 Sentence[],
+        -                 Sentence[],
+        -                 BiSubstitution(),
+        -             )
+        -                 g = Rule(au.general_instance[begin:end-1], au.general_instance[end])
+        -                 g = normalize(g)
+        -                 if !isvalid(g)
+        -                     continue
+        -                 end
+        -                 push!(results, g)
+        -             end
+        -         end
+        -         =#
+        - 
+        -         for au_concl in anti_unify(
+        -             rule_1.conclusion,
+        -             rule_2.conclusion,
+        -             rule_1.premises,
+        -             rule_2.premises,
+        -             BiSubstitution(nothing, false),  # No free variables in the conclusion.
+        -         )
+        -             au_concl.bi_substitution.accepts_free_variable = true
+        -             for permuted_prems_2 in permutations(rule_2.premises)
+        -                 for au_prems in anti_unify(
+        -                     rule_1.premises,
+        -                     permuted_prems_2,
+        -                     Sentence[],
+        -                     Sentence[],
+        -                     au_concl.bi_substitution,
+        -                 )
+        -                     g = Rule(au_prems.general_instance, au_concl.general_instance)
+        -                     g = normalize(g)
+        -                     if !isvalid(g)
+        -                         continue
+        -                     end
+        -                     push!(results, g)
+        -                 end
+        -             end
+        -         end
+        - 
+        -     end
+        - 
+        0     if t > 0.1
+     3424         @warn t
+     3888         @warn rule_1
+     3888         @warn rule_2
+     3872         @warn length(results)
+        -     end
+        - 
+        - 
+    97120     return collect(results)
+        - end
+        - 
+        - function anti_unify_infixes(
+        -     sent_1::AbstractSentence,
+        -     sent_2::AbstractSentence,
+        -     sents_remain_1::Union{Vector{Sentence},Nothing},
+        -     sents_remain_2::Union{Vector{Sentence},Nothing},
+        -     bi_subst::BiSubstitution,
+        - )::Vector{AntiUnifier{Sentence}}
+ 56817024     results = AntiUnifier{Sentence}[]
+        - 
+        -     # They are not even needed for sigmorphon
+        0     if length(sent_1) > 1 && length(sent_2) > 1
+ 19032640         matches = Tuple{Int,Int}[]
+        - 
+        0         for len_p_1 = 1:(length(sent_1)-1)
+        0             prefix_1 = @view sent_1[begin:begin+len_p_1-1]
+        0             suffix_1 = @view sent_1[begin+len_p_1:end]
+        0             for len_p_2 = 1:length(sent_2)-1 #(len_p_1 == 1 ? length(sent_2) - 1 : 1)
+        0                 if findfirst(m -> len_p_1 > m[1] && len_p_2 > m[2], matches) !== nothing
+        0                     continue
+        -                 end
+        - 
+        0                 prefix_2 = @view sent_2[begin:begin+len_p_2-1]
+        0                 suffix_2 = (@view sent_2[begin+len_p_2:end])
+        - 
+        -                 # sent_1 = prefix_1 suffix_1
+        -                 # sent_2 = prefix_2 suffix_2
+        -                 # prefix_1 <- [X] -> prefix_2
+        -                 # suffix_1 <- [Y] -> suffix_2
+        0                 is_new = retrieve_variable(bi_subst, prefix_1, prefix_2)[2]
+        0                 if is_new && (
+        -                     !can_match(suffix_1, suffix_2, bi_subst) ||
+        -                     (prefix_1[end] == prefix_2[end] && is_word(prefix_1[end]))
+        -                 )
+        0                     continue
+        -                 end
+        - 
+ 11246880                 var_p, bi_subst_p = bind_variable!(
+        -                     bi_subst,
+        -                     prefix_1,
+        -                     prefix_2,
+        -                     sents_remain_1,
+        -                     sents_remain_2,
+        -                 )
+        0                 if bi_subst_p === nothing
+        0                     continue
+        -                 end
+        - 
+ 42812496                 push!(matches, (len_p_1, len_p_2))
+        -                 #=
+        -                 var_s, bi_subst_s = bind_variable!(
+        -                     bi_subst_p,
+        -                     suffix_1,
+        -                     suffix_2,
+        -                     sents_remain_1,
+        -                     sents_remain_2,
+        -                 )
+        -                 if bi_subst_s !== nothing
+        -                     push!(results, AntiUnifier(Sentence([var_p, var_s]), bi_subst_s))
+        -                 end
+        -                 =#
+        - 
+        - 
+        0                 aus = anti_unify_no_special_symbol(
+        -                     suffix_1,
+        -                     suffix_2,
+        -                     sents_remain_1,
+        -                     sents_remain_2,
+        -                     bi_subst_p,
+        -                 )
+        - 
+        0                 if isempty(aus)
+        0                     continue
+        -                 end
+        - 
+        - 
+        - 
+        0                 for au in aus
+166161616                     pushfirst!(au.general_instance, var_p)
+ 84121168                     push!(results, au)
+        0                 end
+        0             end
+        0         end
+        - 
+        -     end
+        - 
+        0     if isempty(results)
+        -         # sent_1 <- [X] -> sent_2
+  6347760         let (var, bi_subst_new) =
+        -                 bind_variable!(bi_subst, sent_1, sent_2, sents_remain_1, sents_remain_2)
+        0             if bi_subst_new !== nothing
+125504512                 push!(results, AntiUnifier(Sentence([var]), bi_subst_new))
+        -             end
+        -         end
+        -         # if length(sent_1) == 1 || length(sent_2) == 1
+        -         #    return results
+        -         # end
+        -     end
+        - 
+        0     return results
+        - end
+        - 
+        - function anti_unify_long_sentences(
+        -     sent_1::AbstractSentence,
+        -     sent_2::AbstractSentence,
+        -     sents_remain_1::Union{Vector{Sentence},Nothing},
+        -     sents_remain_2::Union{Vector{Sentence},Nothing},
+        -     bi_subst::BiSubstitution,
+        - )::Vector{AntiUnifier{Sentence}}
+        0     LCSs = find_longest_common_subsequences(sent_1, sent_2)
+        0     results = AntiUnifier{Sentence}[]
+        - 
+        0     for lcs in LCSs
+        0         if isempty(lcs)
+        0             return results
+        -         end
+        - 
+        0         bi_subst_new = bi_subst
+        0         tokens = Token[]
+        0         prev_i = prev_j = 0
+        - 
+        0         for (i, j) in lcs
+        0             if ((i == length(sent_1)) != (j == length(sent_2))) ||
+        -                ((i == prev_i + 1) != (j == prev_j + 1))
+        - 
+        0             elseif i == prev_i + 1 && j == prev_j + 1
+        0                 push!(tokens, sent_1[i])
+        0                 prev_i, prev_j = i, j
+        0             elseif i != prev_i + 1 && j != prev_j + 1
+        0                 var, bi_subst_new = bind_variable!(
+        -                     bi_subst_new,
+        -                     (@view sent_1[prev_i+1:i-1]),
+        -                     (@view sent_2[prev_j+1:j-1]),
+        -                     sents_remain_1,
+        -                     sents_remain_2,
+        -                 )
+        0                 if bi_subst_new === nothing
+        0                     break
+        -                 end
+        0                 push!(tokens, var)
+        0                 push!(tokens, sent_1[i])
+        0                 prev_i, prev_j = i, j
+        -             end
+        0         end
+        - 
+        0         if bi_subst_new !== nothing && prev_i < length(sent_1) && prev_j < length(sent_2)
+        0             var, bi_subst_new = bind_variable!(
+        -                 bi_subst_new,
+        -                 (@view sent_1[prev_i+1:end]),
+        -                 (@view sent_2[prev_j+1:end]),
+        -                 sents_remain_1,
+        -                 sents_remain_2,
+        -             )
+        0             if bi_subst_new !== nothing
+        0                 push!(tokens, var)
+        -             end
+        -         end
+        - 
+        0         if bi_subst_new !== nothing
+        0             push!(results, AntiUnifier(Sentence(tokens), bi_subst_new))
+        -         end
+        0     end
+        - 
+        0     return results
+        - end
+        - 
+        - function find_longest_common_subsequences(sent_1, sent_2)::Vector{Vector{Tuple{Int,Int}}}
+        0     m = length(sent_1)
+        0     n = length(sent_2)
+        0     dp_table = zeros(Int, m + 1, n + 1)
+        - 
+        0     for i = 1:m
+        0         for j = 1:n
+        -             # Fill dp_table[i+1, j+1] with the length of LCSs of sent_1[1:i] and sent_2[1:j].
+        0             if sent_1[i] == sent_2[j]
+        0                 dp_table[i+1, j+1] = 1 + dp_table[i, j]
+        -             else
+        0                 dp_table[i+1, j+1] = max(dp_table[i, j+1], dp_table[i+1, j])
+        -             end
+        0         end
+        0     end
+        - 
+        -     # @warn dp_table
+        0     LCSs = Vector{Tuple{Int,Int}}[]
+        0     queue = Queue{Tuple{Tuple{Int,Int},Vector{Tuple{Int,Int}}}}()
+        0     enqueue!(queue, ((m, n), Tuple{Int,Int}[]))
+        - 
+        0     while !isempty(queue)
+        0         (i, j), inv_suffix = dequeue!(queue)
+        0         if i == 0 || j == 0
+        0             push!(LCSs, reverse(inv_suffix))
+        0             continue
+        -         end
+        - 
+        0         if sent_1[i] == sent_2[j]
+        0             push!(inv_suffix, (i, j))
+        0             enqueue!(queue, ((i - 1, j - 1), inv_suffix))
+        0         elseif dp_table[i, j+1] > dp_table[i+1, j]
+        0             enqueue!(queue, ((i - 1, j), inv_suffix))
+        0         elseif dp_table[i, j+1] < dp_table[i+1, j]
+        0             enqueue!(queue, ((i, j - 1), inv_suffix))
+        -         else
+        0             enqueue!(queue, ((i - 1, j), inv_suffix))
+        -             # enqueue!(queue, ((i, j - 1), copy(inv_suffix)))
+        -         end
+        0     end
+        - 
+        0     return unique(LCSs)
+        - end
+        - 
+        - function anti_unify_same_lengths(
+        -     sent_1::AbstractSentence,
+        -     sent_2::AbstractSentence,
+        -     sents_remain_1::Union{Vector{Sentence},Nothing},
+        -     sents_remain_2::Union{Vector{Sentence},Nothing},
+        -     bi_subst::BiSubstitution,
+        - )::Vector{AntiUnifier{Sentence}}
+        -     @assert length(sent_1) == length(sent_2)
+        -     tokens = Token[]
+        - 
+        -     for i = 1:length(sent_1)
+        -         if sent_1[i] == sent_2[i]
+        -             push!(tokens, sent_1[i])
+        -         else
+        -             var, bi_subst = bind_variable!(
+        -                 bi_subst,
+        -                 (@view sent_1[i:i]),
+        -                 (@view sent_2[i:i]),
+        -                 sents_remain_1,
+        -                 sents_remain_2,
+        -             )
+        -             if bi_subst === nothing
+        -                 return AntiUnifier{Sentence}[]
+        -             end
+        -             push!(tokens, var)
+        -         end
+        -     end
+        - 
+        -     return [AntiUnifier(Sentence(tokens), bi_subst)]
+        - end
+        - 
+        - function anti_unify_no_special_symbol(
+        -     sent_1::AbstractSentence,
+        -     sent_2::AbstractSentence,
+        -     sents_remain_1::Union{Vector{Sentence},Nothing},
+        -     sents_remain_2::Union{Vector{Sentence},Nothing},
+        -     bi_subst::BiSubstitution,
+        -     length_thres::Int = 1000000,
+        - )::Vector{AntiUnifier{Sentence}}
+        0     if sent_1 == sent_2 && is_concrete(sent_1)
+      160         return [AntiUnifier(sent_1, bi_subst)]
+        -     end
+        - 
+ 56817216     results = AntiUnifier{Sentence}[]
+        - 
+        0     prefix, suffix_1, suffix_2 =
+        -         find_common_prefix(sent_1, sent_2, requires_concrete = true)
+        0     _, _, suffix = find_common_suffix(suffix_1, suffix_2, requires_concrete = true)
+        - 
+        0     if prefix == sent_1
+        -         # sent_1 is a concrete prefix of sent_2
+        0         @assert length(prefix) < length(sent_2)
+        0         len_p = length(prefix) - 1
+       80         var, bi_subst_new = bind_variable!(
+        -             bi_subst,
+        -             (@view sent_1[end:end]),
+        -             (@view sent_2[begin+len_p:end]),
+        -             sents_remain_1,
+        -             sents_remain_2,
+        -         )
+        0         if bi_subst_new !== nothing
+      288             push!(results, AntiUnifier(sent_1[begin:end-1] * var, bi_subst_new))
+        -         end
+        - 
+        0     elseif prefix == sent_2
+        -         # sent_2 is a concrete prefix of sent_1
+        0         @assert length(prefix) < length(sent_1)
+        0         len_p = length(prefix) - 1
+      160         var, bi_subst_new = bind_variable!(
+        -             bi_subst,
+        -             (@view sent_1[begin+len_p:end]),
+        -             (@view sent_2[end:end]),
+        -             sents_remain_1,
+        -             sents_remain_2,
+        -         )
+        0         if bi_subst_new !== nothing
+      576             push!(results, AntiUnifier(sent_2[begin:end-1] * var, bi_subst_new))
+        -         end
+        - 
+        0     elseif suffix == sent_1
+        -         # sent_1 is a concrete suffix of sent_2
+        0         @assert length(suffix) < length(sent_2)
+        0         len_s = length(suffix) - 1
+        0         var, bi_subst_new = bind_variable!(
+        -             bi_subst,
+        -             (@view sent_1[begin:begin]),
+        -             (@view sent_2[begin:end-len_s]),
+        -             sents_remain_1,
+        -             sents_remain_2,
+        -         )
+        0         if bi_subst_new !== nothing
+        0             push!(results, AntiUnifier(var * sent_1[begin+1:end], bi_subst_new))
+        -         end
+        - 
+        0     elseif suffix == sent_2
+        -         # sent_2 is a concrete suffix of sent_1
+        0         @assert length(suffix) < length(sent_1)
+        0         len_s = length(suffix) - 1
+        0         var, bi_subst_new = bind_variable!(
+        -             bi_subst,
+        -             (@view sent_1[begin:end-len_s]),
+        -             (@view sent_2[begin:begin]),
+        -             sents_remain_1,
+        -             sents_remain_2,
+        -         )
+        0         if bi_subst_new !== nothing
+        0             push!(results, AntiUnifier(var * sent_2[begin+1:end], bi_subst_new))
+        -         end
+        - 
+        0     elseif length(prefix) + length(suffix) == length(sent_1)
+        -         # sent_2 is the result of inserting something into the middle of sent_1
+        0         for (len_p, len_s) in
+        -             ((length(prefix) - 1, length(suffix)), (length(prefix), length(suffix) - 1))
+        0             var, bi_subst_new = bind_variable!(
+        -                 bi_subst,
+        -                 (@view sent_1[begin+len_p:begin+len_p]),
+        -                 (@view sent_2[begin+len_p:end-len_s]),
+        -                 sents_remain_1,
+        -                 sents_remain_2,
+        -             )
+        0             if bi_subst_new !== nothing
+        0                 push!(
+        -                     results,
+        -                     AntiUnifier(
+        -                         sent_2[begin:begin+len_p-1] * var * sent_2[end-len_s+1:end],
+        -                         bi_subst_new,
+        -                     ),
+        -                 )
+        -             end
+        0         end
+        - 
+        0     elseif length(prefix) + length(suffix) == length(sent_2)
+        -         # sent_1 is the result of inserting something into the middle of sent_2
+        0         for (len_p, len_s) in
+        -             ((length(prefix) - 1, length(suffix)), (length(prefix), length(suffix) - 1))
+        0             var, bi_subst_new = bind_variable!(
+        -                 bi_subst,
+        -                 (@view sent_1[begin+len_p:end-len_s]),
+        -                 (@view sent_2[begin+len_p:begin+len_p]),
+        -                 sents_remain_1,
+        -                 sents_remain_2,
+        -             )
+        0             if bi_subst_new !== nothing
+        0                 push!(
+        -                     results,
+        -                     AntiUnifier(
+        -                         sent_1[begin:begin+len_p-1] * var * sent_1[end-len_s+1:end],
+        -                         bi_subst_new,
+        -                     ),
+        -                 )
+        -             end
+        0         end
+        - 
+        -     else
+        0         len_p = length(prefix)
+        0         len_s = length(suffix)
+        0         infix_1 = @view sent_1[begin+len_p:end-len_s]
+        0         infix_2 = @view sent_2[begin+len_p:end-len_s]
+        0         @assert !isempty(infix_1) && !isempty(infix_2)
+ 56817024         aus = AntiUnifier{Sentence}[]
+        - 
+        -         #if length(infix_1) == length(infix_2)
+        -         #    append!(aus, anti_unify_same_lengths(infix_1, infix_2, sents_remain_1, sents_remain_2, bi_subst))
+        -         #end
+        - 
+        0         if length(infix_1) > length_thres || length(infix_2) > length_thres
+        0             append!(
+        -                 aus,
+        -                 anti_unify_long_sentences(
+        -                     infix_1,
+        -                     infix_2,
+        -                     sents_remain_1,
+        -                     sents_remain_2,
+        -                     bi_subst,
+        -                 ),
+        -             )
+        -         else
+        0             append!(
+        -                 aus,
+        -                 anti_unify_infixes(
+        -                     infix_1,
+        -                     infix_2,
+        -                     sents_remain_1,
+        -                     sents_remain_2,
+        -                     bi_subst,
+        -                 ),
+        -             )
+        -         end
+        - 
+        0         for au in aus
+ 43962128             sent = sent_1[begin:begin+len_p-1]
+277224608             append!(sent, au.general_instance)
+        0             append!(sent, @view sent_2[end-len_s+1:end])
+164802640             push!(results, AntiUnifier(sent, au.bi_substitution))
+        0         end
+        -     end
+        - 
+        0     return results
+        - end
+        - 
+        - function anti_unify_no_special_symbol(
+        -     sents_1::AbstractVector{Sentence},
+        -     sents_2::AbstractVector{Sentence},
+        -     sents_remain_1::Union{Vector{Sentence},Nothing},
+        -     sents_remain_2::Union{Vector{Sentence},Nothing},
+        -     bi_subst::BiSubstitution,
+        - )::Vector{AntiUnifier{Vector{Sentence}}}
+        0     @assert length(sents_1) == length(sents_2)
+        0     if isempty(sents_1)
+ 72933552         return [AntiUnifier(Sentence[], bi_subst)]
+        -     end
+        - 
+        -     # Anti-unify the elements sequentially, starting with the first pair
+  6885312     results = AntiUnifier{Vector{Sentence}}[]
+  6885632     other_sents_1 = sents_1[2:end]
+  6885632     other_sents_2 = sents_2[2:end]
+        - 
+        0     for au_first in anti_unify_no_special_symbol(
+        -         sents_1[1],
+        -         sents_2[1],
+        -         sents_remain_1 === nothing ? nothing : [other_sents_1; sents_remain_1],
+        -         sents_remain_2 === nothing ? nothing : [other_sents_2; sents_remain_2],
+        -         bi_subst,
+        -     )
+        0         for au_others in anti_unify_no_special_symbol(
+        -             other_sents_1,
+        -             other_sents_2,
+        -             sents_remain_1,
+        -             sents_remain_2,
+        -             au_first.bi_substitution,
+        -         )
+ 40518640             pushfirst!(au_others.general_instance, au_first.general_instance)
+ 76244944             push!(results, au_others)
+        0         end
+        0     end
+        - 
+        0     return results
+        - end
+        - 
+        - export anti_unify, AntiUnifier, get_specific_instances

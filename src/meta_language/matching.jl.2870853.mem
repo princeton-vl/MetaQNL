@@ -1,0 +1,340 @@
+        - """
+        -     Base.match(sent_1::AbstractSentence, sent_2::AbstractSentence)::Vector{Substitution}
+        - 
+        - Match `sent_1` with `sent_2`.
+        - 
+        - # Example
+        - ```jldoctest
+        - julia> match(sent"dax fep", sent"dax [X]")
+        - Substitution[]
+        - 
+        - julia> match(sent"dax [X]", sent"dax fep")
+        - 1-element Vector{Substitution}:
+        -  {[X] -> fep, }
+        - ```
+        - """
+        - function Base.match(
+        -     sent_1::AbstractSentence,
+        -     sent_2::AbstractSentence,
+        - )::Vector{Substitution}
+        0     if isempty(sent_1) && isempty(sent_2)
+      128         return [Substitution()]
+        0     elseif isempty(sent_1) || isempty(sent_2)
+        0         return Substitution[]
+        0     elseif is_concrete(sent_1)
+      256         return is_identical(sent_1, sent_2) ? [Substitution()] : Substitution[]
+        0     elseif SentenceTemplate(sent_1) != SentenceTemplate(sent_2)
+        0         return Substitution[]
+        -     end
+        - 
+   162064     alignment = Vector{Int}(undef, length(sent_1))  # Align sent_1[i] with sent_2[alignment[i]]
+        0     i = 1
+        0     backtracking = false
+    33536     results = Substitution[]
+        - 
+        0     while i >= 1
+        - 
+        -         # A complete solution is available.
+        0         if i > length(sent_1)
+        0             append!(results, resolve_variables(sent_1, sent_2, alignment))
+        0             backtracking = true
+        0             i -= 1
+        0             continue
+        -         end
+        - 
+        0         t = sent_1[i]
+        0         base = (i == 1) ? 0 : alignment[i-1]
+        - 
+        0         if is_variable(t)  # Skip variables.
+        0             alignment[i] = base
+        0             if !backtracking
+        0                 i += 1
+        -             else
+        0                 i -= 1
+        -             end
+        - 
+        0         elseif i == 1  # Starting words must match
+        0             if sent_1[begin] != sent_2[begin]
+      128                 return Substitution[]
+        0             elseif !backtracking && (length(sent_1) > 1 || length(sent_2) == 1)
+        0                 alignment[i] = 1
+        0                 i += 1
+        -             else
+        0                 break
+        -             end
+        - 
+        0         elseif i == length(sent_1)  # Ending words must match
+        0             if sent_1[end] != sent_2[end]
+        0                 return Substitution[]
+        0             elseif (!is_variable(sent_1[i-1]) && alignment[i-1] != length(sent_2) - 1)
+        0                 backtracking = true
+        0                 i -= 1
+        0                 continue
+        -             end
+        0             if !backtracking
+        0                 alignment[i] = length(sent_2)
+        0                 i += 1
+        -             else
+        0                 break
+        -             end
+        - 
+        0         elseif !is_variable(sent_1[i-1]) # Consecutive words
+        0             if backtracking
+        0                 i -= 1
+        0             elseif 1 + alignment[i-1] <= length(sent_2) && t == sent_2[1+alignment[i-1]]
+        0                 alignment[i] = 1 + alignment[i-1]
+        0                 i += 1
+        -             else
+        0                 backtracking = true
+        0                 i -= 1
+        -             end
+        - 
+        0         elseif backtracking
+        0             j = findfirst(==(t), @view sent_2[alignment[i]+1:end])
+        0             if j === nothing  # Backtrack further.
+        0                 i -= 1
+        -             else  # Stop backtracking.
+        0                 alignment[i] = j + alignment[i]
+        0                 backtracking = false
+        0                 i += 1
+        -             end
+        - 
+        -         else
+        0             j = findfirst(==(t), @view sent_2[base+1:end])
+        0             if j === nothing  # Backtrack.
+        0                 backtracking = true
+        0                 i -= 1
+        -             else  # Proceed.
+        0                 alignment[i] = j + base
+        0                 i += 1
+        -             end
+        -         end
+        0     end
+        - 
+        0     return results
+        - end
+        - 
+        - function Base.match(
+        -     sents_1::AbstractVector{<:AbstractSentence},
+        -     sents_2::AbstractVector{<:AbstractSentence},
+        - )::Vector{Substitution}
+        0     @assert length(sents_1) == length(sents_2)
+        0     if isempty(sents_1)
+        0         return [Substitution()]
+        -     end
+        - 
+        0     return match(join(sents_1, symbol"DELIMI"), join(sents_2, symbol"DELIMI"))
+        - end
+        - 
+        - """
+        -     Base.match(rule_1::Rule, rule_2::Rule)::Vector{Substitution}
+        - 
+        - Match `rule_1` with `rule_2`.
+        - 
+        - # Example
+        - ```jldoctest
+        - julia> r1 = Rule([sent"dax \$MAPS_TO\$ [Y]"], sent"dax fep \$MAPS_TO\$ [Y] [Y] [Y]");
+        - 
+        - julia> r2 = Rule([sent"dax \$MAPS_TO\$ RED"], sent"dax fep \$MAPS_TO\$ RED RED RED");
+        - 
+        - julia> match(r1, r2)
+        - 1-element Vector{Substitution}:
+        -  {[Y] -> RED, }
+        - ```
+        - """
+        - function Base.match(rule_1::Rule, rule_2::Rule)::Vector{Substitution}
+    27840     results = Substitution[]
+        0     if length(rule_1.premises) != length(rule_2.premises)
+        0         return results
+        0     elseif isempty(rule_1.premises)
+        0         return match(rule_1.conclusion, rule_2.conclusion)
+        0     elseif is_concrete(rule_1)
+        0         return is_equivalent(rule_1, rule_2) ? [Substitution()] : Substitution[]
+        -     end
+        - 
+    34864     sents_1 = [rule_1.conclusion; rule_1.premises]
+        - 
+        0     for prems_2 in permutations(rule_2.premises)
+    38144         append!(results, match(sents_1, [rule_2.conclusion; prems_2]))
+     1184     end
+        - 
+        0     unique!(results)
+        0     return results
+        - end
+        - 
+        - """
+        -     is_more_general(x::Union{Rule,AbstractSentence}, y::Union{Rule,AbstractSentence})
+        - 
+        - Test if `x` is more general than `y`.
+        - 
+        - # Example
+        - ```jldoctest
+        - julia> r1 = Rule([sent"dax \$MAPS_TO\$ [Y]"], sent"dax fep \$MAPS_TO\$ [Y] [Y] [Y]");
+        - 
+        - julia> r2 = Rule([sent"dax \$MAPS_TO\$ RED"], sent"dax fep \$MAPS_TO\$ RED RED RED");
+        - 
+        - julia> is_more_general(r1, r2)
+        - true
+        - 
+        - julia> is_more_general(r2, r1)
+        - false
+        - ```
+        - """
+        - function is_more_general(x::Union{Rule,AbstractSentence}, y::Union{Rule,AbstractSentence})
+        0     return !isempty(match(x, y))
+        - end
+        - 
+        - function resolve_variables(
+        -     sent_1::AbstractSentence,
+        -     sent_2::AbstractSentence,
+        -     alignment::Vector{Int},
+        - )::Vector{Substitution}
+        -     # Assign variables in `sent_1` to sentence segments in `sent_2`.
+  7422336     results = Substitution[]
+        0     subst = Substitution()
+        0     max_alignment = get_max_alignment(sent_1, sent_2, alignment)
+        0     i = 1
+        0     backtracking = false
+        - 
+        0     function bind_variable(i, j_start, j_end)
+        0         if j_end < j_start
+        0             return false
+        -         end
+        - 
+        0         var = sent_1[i]
+        0         sent = @view sent_2[j_start:j_end]
+        0         s = get(subst, var, nothing)
+        0         if s !== nothing && s != sent
+        0             return false
+        -         end
+        - 
+        0         suffix_1 = @view sent_1[i+1:end]
+        0         suffix_2 = @view sent_2[j_end+1:end]
+        0         if var in suffix_1 && !occursin(sent, suffix_2)
+        0             return false
+        -         end
+        - 
+        0         subst[var] = sent
+        0         return true
+        -     end
+        - 
+        0     function last_variable_in_block(i)
+        -         return is_variable(sent_1[i]) && (i == length(sent_1) || !is_variable(sent_1[i+1]))
+        -     end
+        - 
+        0     function align_last_variable(i)
+        -         return i == length(sent_1) ? length(sent_2) : alignment[i+1] - 1
+        -     end
+        - 
+        0     while i >= 1
+        0         if i > length(sent_1)  # A complete solution is available.
+    78096             push!(results, copy(subst))
+        0             backtracking = true
+        0             i -= 1
+        0             continue
+        -         end
+        - 
+        0         if is_variable(sent_1[i])
+        0             var = sent_1[i]
+        - 
+        0             if i == 1  # The first tokens in sent_1 and sent_2 must match.
+        0                 alignment[i] = 1
+        0             elseif !is_variable(sent_1[i-1])  # The first variable in a block.
+        0                 alignment[i] = alignment[i-1] + 1
+        -             else
+        -                 # The middle variable in a block, i.e. sent_1[i-1] is also a variable.
+        0                 prev_var = sent_1[i-1]
+        0                 if !backtracking
+        0                     success = false
+        0                     for j = (1+alignment[i-1]):max_alignment[i]
+        0                         if bind_variable(i - 1, alignment[i-1], j - 1)
+        0                             success = true
+        0                             alignment[i] = j
+        0                             break
+        -                         end
+        0                     end
+        0                     if !success
+        0                         backtracking = true
+        -                     end
+        - 
+        0                 elseif findfirst(==(prev_var), sent_1) == i - 1
+        -                     # The previous variable hasn't been constrained by previous bindings.
+        0                     delete!(subst, prev_var)
+        0                     if last_variable_in_block(i) && findfirst(==(var), sent_1) == i
+        0                         delete!(subst, var)
+        -                     end
+        - 
+        0                     if alignment[i] < max_alignment[i]
+        0                         alignment[i] += 1
+        0                         if !bind_variable(i - 1, alignment[i-1], alignment[i] - 1)
+        0                             continue
+        -                         end
+        0                         if last_variable_in_block(i) &&
+        -                            !bind_variable(
+        -                             i,
+        -                             alignment[i],
+        -                             i == length(sent_1) ? length(sent_2) : alignment[i+1] - 1,
+        -                         )
+        0                             continue
+        -                         end
+        0                         backtracking = false
+        - 
+        -                     else
+        0                         alignment[i] = align_last_variable(i) - 1
+        -                     end
+        -                 end
+        -             end
+        - 
+        0             if last_variable_in_block(i)
+        0                 if !backtracking
+        0                     if !bind_variable(i, alignment[i], align_last_variable(i))
+        0                         backtracking = true
+        0                         continue
+        -                     end
+        -                 else
+        0                     if findfirst(==(var), sent_1) == i
+        0                         delete!(subst, var)
+        -                     end
+        -                 end
+        -             end
+        -         end
+        - 
+        0         if !backtracking
+        0             i += 1
+        -         else
+        0             i -= 1
+        -         end
+        0     end
+        - 
+        0     return results
+        - end
+        - 
+        - 
+        - function get_max_alignment(sent_1, sent_2, alignment)
+ 40378128     max_alignment = Vector{Int}(undef, length(alignment))
+        - 
+        0     for (i, t) in enumerate(sent_1)
+        0         if !is_variable(t)
+        0             max_alignment[i] = alignment[i]
+        -         end
+        - 
+        0         if i == 1
+        0             max_alignment[i] = 1
+        0         elseif !is_variable(sent_1[i-1])
+        0             max_alignment[i] = alignment[i-1] + 1
+        0         elseif i == length(sent_1)
+        0             max_alignment[i] = length(sent_2)
+        -         else
+        0             k = findfirst(>(alignment[i]), @view (alignment[i+1:end]))
+        0             if k === nothing
+        0                 max_alignment[i] = length(sent_2) - length(sent_1) + i
+        -             else
+        0                 max_alignment[i] = alignment[i+k] - k
+        -             end
+        -         end
+        0     end
+        - 
+        0     return max_alignment
+        - end
+        - 
+        - export is_more_general

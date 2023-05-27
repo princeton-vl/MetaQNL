@@ -1,0 +1,252 @@
+        - """
+        -     unify(sent_1::AbstractSentence, sent_2::AbstractSentence)::Vector{Substitution}
+        - 
+        - Return the unifiers of `sent_1` and `sent_2`.
+        - 
+        - # Example
+        - ```jldoctest
+        - julia> unify(sent"dax fep", sent"dax [X]")
+        - 1-element Vector{Substitution}:
+        -  {[X] -> fep, }
+        - 
+        - julia> unify(sent"hello [X]", sent"[X] hello", depth_limit = 10)
+        - 10-element Vector{Substitution}:
+        -  {[X] -> hello, }
+        -  {[X] -> hello hello, }
+        -  {[X] -> hello hello hello, }
+        -  {[X] -> hello hello hello hello, }
+        -  {[X] -> hello hello hello hello hello, }
+        -  {[X] -> hello hello hello hello hello hello, }
+        -  {[X] -> hello hello hello hello hello hello hello, }
+        -  {[X] -> hello hello hello hello hello hello hello hello, }
+        -  {[X] -> hello hello hello hello hello hello hello hello hello, }
+        -  {[X] -> hello hello hello hello hello hello hello hello hello hello, }
+        - ```
+        - """
+        - function unify(
+        -     sent_1::AbstractSentence,
+        -     sent_2::AbstractSentence;
+        -     depth_limit::Int = 5,
+        - )::Vector{Substitution}
+        0     if is_concrete(sent_1)
+        0         return match(sent_2, sent_1)
+        0     elseif is_concrete(sent_2)
+        0         return match(sent_1, sent_2)
+        -     end
+        - 
+        0     no_symbol_1 = has_no_special_symbol(sent_1)
+        0     no_symbol_2 = has_no_special_symbol(sent_2)
+        - 
+        0     if no_symbol_1 && no_symbol_2
+        0         return unify_no_special_symbol(sent_1, sent_2, depth_limit)
+        0     elseif no_symbol_1 || no_symbol_2
+        0         return Substitution[]
+        -     else
+        0         tpl_1, segments_1 = decompose(sent_1)
+        0         tpl_2, segments_2 = decompose(sent_2)
+        0         if tpl_1 != tpl_2
+        0             return Substitution[]
+        -         end
+        0         return unify_no_special_symbol(segments_1, segments_2, depth_limit)
+        -     end
+        - end
+        - 
+        - function unify_no_special_symbol(
+        -     sents_1::AbstractVector{<:AbstractSentence},
+        -     sents_2::AbstractVector{<:AbstractSentence},
+        -     depth_limit::Int,
+        - )::Vector{Substitution}
+        0     @assert length(sents_1) == length(sents_2)
+        0     if isempty(sents_1)
+        0         return [Substitution()]
+        -     end
+        - 
+        0     first_sent_1 = sents_1[begin]
+        0     first_sent_2 = sents_2[begin]
+        0     first_substs = unify_no_special_symbol(first_sent_1, first_sent_2, depth_limit)
+        0     if length(sents_1) == 1
+        0         return first_substs
+        -     end
+        - 
+        0     substs = Substitution[]
+        0     sents_remain_2 = @view sents_2[2:end]
+        - 
+        0     for subst in first_substs
+        0         sents_remain_1 = subst.(@view sents_1[2:end])
+        0         for other_subst in
+        -             unify_no_special_symbol(sents_remain_1, subst.(sents_remain_2), depth_limit)
+        0             push!(substs, subst ∘ other_subst)
+        0         end
+        0     end
+        - 
+        0     return substs
+        - end
+        - 
+        - struct UnificationSubproblem
+        -     sentence_1::Sentence
+        -     sentence_2::Sentence
+        -     substitution::Substitution
+        -     depth::Int
+        - end
+        - 
+        - function unify_no_special_symbol(
+        -     sent_1::AbstractSentence,
+        -     sent_2::AbstractSentence,
+        -     depth_limit::Int,
+        - )::Vector{Substitution}
+        - 
+      448     results = Substitution[]
+   230496     queue = Queue{UnificationSubproblem}()
+        0     enqueue!(queue, UnificationSubproblem(sent_1, sent_2, Substitution(), 0))
+        - 
+        0     while !isempty(queue)
+        0         problem = dequeue!(queue)
+        0         sent_1, sent_2 = find_different_infixes(
+        -             problem.sentence_1,
+        -             problem.sentence_2,
+        -             requires_concrete = false,
+        -         )
+        - 
+        -         # problem.sentence_1 == problem.sentence_2
+        0         if isempty(sent_1) && isempty(sent_2)
+       80             push!(results, problem.substitution)
+        0             continue
+        -         end
+        - 
+        0         if isempty(sent_1) ||
+        -            isempty(sent_2) ||
+        -            problem.depth >= depth_limit ||
+        -            (startswith_word(sent_1) && startswith_word(sent_2))
+        0             continue
+        -         end
+        - 
+        0         depth = problem.depth + 1
+        - 
+        0         if is_one_variable(sent_1)
+        -             # sent_1: [X]
+        -             # sent_2
+        0             X = sent_1[1]
+        0             if !(X in sent_2)
+      160                 push!(results, problem.substitution ∘ VariableBinding(X, sent_2[1:end]))
+        -             end
+        - 
+        0         elseif is_one_variable(sent_2)
+        -             # sent_1
+        -             # sent_2: [X]
+        0             X = sent_2[1]
+        0             if !(X in sent_1)
+      160                 push!(results, problem.substitution ∘ VariableBinding(X, sent_1[1:end]))
+        -             end
+        - 
+        0         elseif is_concrete(sent_1)
+        0             for subst in match(sent_2, sent_1)
+        0                 push!(results, problem.substitution ∘ subst)
+        0             end
+        - 
+        0         elseif is_concrete(sent_2)
+        0             for subst in match(sent_1, sent_2)
+        0                 push!(results, problem.substitution ∘ subst)
+        0             end
+        - 
+        0         elseif (!startswith_word(sent_1) && !startswith_word(sent_2))
+        -             # sent_1: [X] suffix_1
+        -             # sent_2: [Y] suffix_2
+        0             X = sent_1[1]
+        0             Y = sent_2[1]
+        0             suffix_1 = sent_1[2:end]
+        0             suffix_2 = sent_2[2:end]
+        - 
+        -             # Option a: [X] -> [Y], suffix_1' -> suffix_2'
+      640             let subst_a = VariableBinding(X, Sentence([Y]))
+        0                 subproblem_a = UnificationSubproblem(
+        -                     subst_a(suffix_1),
+        -                     subst_a(suffix_2),
+        -                     problem.substitution ∘ subst_a,
+        -                     depth,
+        -                 )
+        0                 enqueue!(queue, subproblem_a)
+        -             end
+        - 
+        -             # Option b: [X] -> [Y] [X], [X] suffix_1' -> suffix_2'
+      768             let subst_b = VariableBinding(X, Sentence([Y, X]))
+     1376                 subproblem_b = UnificationSubproblem(
+        -                     X * subst_b(suffix_1),
+        -                     subst_b(suffix_2),
+        -                     problem.substitution ∘ subst_b,
+        -                     depth,
+        -                 )
+        0                 enqueue!(queue, subproblem_b)
+        -             end
+        -             # Option c: [Y] -> [X] [Y], suffix_1' -> [Y] suffix_2'
+      768             let subst_c = VariableBinding(Y, Sentence([X, Y]))
+     2512                 subproblem_c = UnificationSubproblem(
+        -                     subst_c(suffix_1),
+        -                     Y * subst_c(suffix_2),
+        -                     problem.substitution ∘ subst_c,
+        -                     depth,
+        -                 )
+        0                 enqueue!(queue, subproblem_c)
+        -             end
+        - 
+        0         elseif !startswith_word(sent_1)
+        -             # sent_1: [X] suffix_1
+        -             # sent_2: t suffix_2
+        0             X = sent_1[1]
+        0             t = sent_2[1]
+        0             suffix_1 = sent_1[2:end]
+        0             suffix_2 = sent_2[2:end]
+        -             # Option a: [X] -> t, suffix_1' -> suffix_2'
+     2320             let subst_a = VariableBinding(X, Sentence([t]))
+        0                 subproblem_a = UnificationSubproblem(
+        -                     subst_a(suffix_1),
+        -                     subst_a(suffix_2),
+        -                     problem.substitution ∘ subst_a,
+        -                     depth,
+        -                 )
+        0                 enqueue!(queue, subproblem_a)
+        -             end
+        -             # Option 2: [X] -> t [X], [X] suffix_1' -> suffix_2'
+     2784             let subst_b = VariableBinding(X, Sentence([t, X]))
+     4896                 subproblem_b = UnificationSubproblem(
+        -                     X * subst_b(suffix_1),
+        -                     subst_b(suffix_2),
+        -                     problem.substitution ∘ subst_b,
+        -                     depth,
+        -                 )
+        0                 enqueue!(queue, subproblem_b)
+        -             end
+        -         else
+        0             @assert !startswith_word(sent_2)
+        -             # sent_1: t suffix_1
+        -             # sent_2: [X]  suffix_2
+        0             t = sent_1[1]
+        0             X = sent_2[1]
+        0             suffix_1 = sent_1[2:end]
+        0             suffix_2 = sent_2[2:end]
+        -             # Option 1: [X] -> t, suffix_2' -> suffix_1'
+      400             let subst_a = VariableBinding(X, Sentence([t]))
+        0                 subproblem_a = UnificationSubproblem(
+        -                     subst_a(suffix_2),
+        -                     subst_a(suffix_1),
+        -                     problem.substitution ∘ subst_a,
+        -                     depth,
+        -                 )
+        0                 enqueue!(queue, subproblem_a)
+        -             end
+        -             # Option 2: [X] -> t [X], [X] suffix_2' -> suffix_1'
+      480             let subst_b = VariableBinding(X, Sentence([t, X]))
+      752                 subproblem_b = UnificationSubproblem(
+        -                     X * subst_b(suffix_2),
+        -                     subst_b(suffix_1),
+        -                     problem.substitution ∘ subst_b,
+        -                     depth,
+        -                 )
+        0                 enqueue!(queue, subproblem_b)
+        -             end
+        -         end
+        0     end
+        - 
+        0     return results
+        - end
+        - 
+        - export unify

@@ -1,0 +1,11 @@
+[MiniSCAN]
+git-tree-sha1 = "4ca27a7e7d3ff3229e1c26bfccb8f218759240b5"
+
+[RuleTaker]
+git-tree-sha1 = "d70478825f8f7f558bc5c02165ce13b39610883f"
+
+[SCAN]
+git-tree-sha1 = "150c6b3c7ff99528b858607893ed2d9bd892a838"
+
+["SIGMORPHON 2018"]
+git-tree-sha1 = "19c102b7ea014308f41013df01eedde4cfb88997"

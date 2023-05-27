@@ -1,0 +1,5 @@
+# Model
+
+```@autodocs
+Modules = [Model]
+```
