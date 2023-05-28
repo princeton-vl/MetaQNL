@@ -116,9 +116,7 @@ function evaluate(ds::Dataset, all_preds::AbstractVector{<:AbstractVector{<:Pred
 
     acc /= length(ds)
 
-    return Dict(
-        "accuracy" => acc,
-    )
+    return Dict("accuracy" => acc)
 end
 
 export Dataset, subsample, KGCDataset, Prediction, evaluate
