@@ -6,7 +6,7 @@ Code for the paper:
 
 [Learning Symbolic Rules for Reasoning in Quasi-Natural Language](https://arxiv.org/abs/2111.12038)      
 Transactions on Machine Learning Research (TMLR), 2023  
-[Kaiyu Yang](https://www.cs.princeton.edu/~kaiyuy/) and [Jia Deng](https://www.cs.princeton.edu/~jiadeng/)     
+[Kaiyu Yang](https://yangky11.github.io/) and [Jia Deng](https://www.cs.princeton.edu/~jiadeng/)     
 ```bibtex
 @article{yang2023metaqnl,
   title={Learning Symbolic Rules for Reasoning in Quasi-Natural Language},
